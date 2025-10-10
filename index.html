@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Sermon Knowledge Base</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 1200px; margin: 0 auto; padding: 20px; }
+        .section { background: white; padding: 20px; margin: 20px 0; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        button { background: #7c3aed; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; margin: 5px; }
+        button:hover { background: #6d28d9; }
+        input, textarea { width: 100%; padding: 10px; margin: 10px 0; border: 1px solid #ddd; border-radius: 5px; }
+        .answer { background: #f3e8ff; padding: 15px; border-radius: 5px; white-space: pre-wrap; }
+        .status { padding: 10px; border-radius: 5px; margin: 10px 0; }
+        .success { background: #d1fae5; color: #065f46; }
+        .error { background: #fee2e2; color: #991b1b; }
+    </style>
+</head>
+<body>
+    <h1>🎙️ Sermon Knowledge Base</h1>
+    
+    <div class="section">
+        <h2>Step 1: Import Sermons</h2>
+        <input type="file" id="fileInput" accept=".json">
+        <button onclick="importSermons()">Import Sermons</button>
+        <div id="importStatus"></div>
+    </div>
+
+    <div class="section">
+        <h2>Step 2: Ask Questions</h2>
+        <input type="text" id="question" placeholder="What do I believe about prayer?" />
+        <button onclick="askQuestion()">Search</button>
+        <div id="answer"></div>
+    </div>
+
+    <script>
+        let sermons = [];
+
+        async function importSermons() {
+            const file = document.getElementById('fileInput').files[0];
+            if (!file) {
+                alert('Please select a file first');
+                return;
+            }
+
+            const text = await file.text();
+            sermons = JSON.parse(text);
+            
+            // Upload to backend
+            const response = await fetch('http://sermon-knowledge-base-api.onrender.com/api/sermons/upload', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({sermons: sermons})
+            });
+            
+            document.getElementById('importStatus').innerHTML = 
+                `<div class="status success">✅ Imported ${sermons.length} sermons!</div>`;
+        }
+
+        async function askQuestion() {
+            const query = document.getElementById('question').value;
+            if (!query) return;
+
+            document.getElementById('answer').innerHTML = '<p>Searching...</p>';
+
+            const response = await fetch('http://sermon-knowledge-base-api.onrender.com/api/ask', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({query: query})
+            });
+
+            const data = await response.json();
+            
+            let html = '<div class="answer">';
+            html += '<h3>Answer:</h3>';
+            html += data.answer;
+            if (data.sources && data.sources.length > 0) {
+                html += '<h4>Sources:</h4><ul>';
+                data.sources.forEach(s => {
+                    html += `<li><a href="${s.url}" target="_blank">${s.title}</a></li>`;
+                });
+                html += '</ul>';
+            }
+            html += '</div>';
+            
+            document.getElementById('answer').innerHTML = html;
+        }
+    </script>
+</body>
+</html>
