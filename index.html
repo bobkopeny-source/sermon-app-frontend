@@ -52,18 +52,6 @@
         input[type="text"]:focus {
             border-color: #764ba2;
         }
-        .clear-btn {
-            position: absolute;
-            right: 120px;
-            top: 50%;
-            transform: translateY(-50%);
-            background: #ccc;
-            border: none;
-            border-radius: 50%;
-            width: 24px;
-            height: 24px;
-            cursor: pointer;
-            display: none;
             align-items: center;
             justify-content: center;
             color: white;
@@ -167,6 +155,24 @@
         }
         .answer p {
             margin-bottom: 10px;
+        }
+        .clear-btn {
+            background: #dc3545;
+            border: none;
+            border-radius: 50%;
+            width: 36px;
+            height: 36px;
+            cursor: pointer;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 18px;
+            font-weight: bold;
+            flex-shrink: 0;
+        }
+        .clear-btn:hover {
+            background: #c82333;
         }
     </style>
 </head>
