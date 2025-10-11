@@ -45,7 +45,7 @@
             sermons = JSON.parse(text);
             
             // Upload to backend
-            const response = await fetch('http://sermon-knowledge-base-api.onrender.com/api/sermons/upload', {
+            const response = await fetch('https://sermon-knowledge-base-api.onrender.com/api/sermons/upload', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({sermons: sermons})
@@ -61,7 +61,7 @@
 
             document.getElementById('answer').innerHTML = '<p>Searching...</p>';
 
-            const response = await fetch('http://sermon-knowledge-base-api.onrender.com/api/ask', {
+            const response = await fetch('https://sermon-knowledge-base-api.onrender.com/api/ask', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({query: query})
