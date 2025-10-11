@@ -6,75 +6,137 @@
     <title>🎙️ Sermon Knowledge Base</title>
     <style>
         body {
-            font-family: Arial, sans-serif;
-            max-width: 800px;
-            margin: 50px auto;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 900px;
+            margin: 0 auto;
             padding: 20px;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
         }
         .container {
             background: white;
-            padding: 30px;
-            border-radius: 15px;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            padding: 40px;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
         }
         h1 {
             color: #667eea;
             text-align: center;
+            margin-bottom: 10px;
+            font-size: 2.5em;
+        }
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 40px;
+            font-size: 1.1em;
         }
         .search-section {
-            margin-top: 30px;
+            position: relative;
+            margin-bottom: 30px;
+        }
+        .input-wrapper {
+            position: relative;
+            display: flex;
+            gap: 10px;
         }
         input[type="text"] {
-            width: 100%;
-            padding: 12px;
+            flex: 1;
+            padding: 15px 40px 15px 15px;
             font-size: 16px;
             border: 2px solid #667eea;
-            border-radius: 8px;
-            margin-bottom: 10px;
+            border-radius: 10px;
+            outline: none;
+            transition: border-color 0.3s;
         }
-        button {
-            width: 100%;
-            padding: 12px;
+        input[type="text"]:focus {
+            border-color: #764ba2;
+        }
+        .clear-btn {
+            position: absolute;
+            right: 120px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: #ccc;
+            border: none;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            cursor: pointer;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 16px;
+            line-height: 1;
+        }
+        .clear-btn:hover {
+            background: #999;
+        }
+        button.search-btn {
+            padding: 15px 30px;
             font-size: 16px;
             background: #667eea;
             color: white;
             border: none;
-            border-radius: 8px;
+            border-radius: 10px;
             cursor: pointer;
             transition: background 0.3s;
+            font-weight: bold;
         }
-        button:hover {
+        button.search-btn:hover {
             background: #5568d3;
         }
-        button:disabled {
+        button.search-btn:disabled {
             background: #ccc;
             cursor: not-allowed;
         }
         #results {
-            margin-top: 30px;
+            margin-top: 40px;
         }
         .answer {
-            background: #f8f9fa;
-            padding: 20px;
-            border-radius: 8px;
-            border-left: 4px solid #667eea;
-            margin-bottom: 20px;
-            line-height: 1.6;
+            background: linear-gradient(to right, #f8f9fa, #ffffff);
+            padding: 30px;
+            border-radius: 12px;
+            border-left: 6px solid #667eea;
+            margin-bottom: 30px;
+            line-height: 1.8;
+            font-size: 1.05em;
+        }
+        .answer strong {
+            color: #667eea;
+            font-size: 1.2em;
+            display: block;
+            margin-bottom: 15px;
         }
         .sources {
-            margin-top: 20px;
+            margin-top: 30px;
+            background: #f8f9fa;
+            padding: 25px;
+            border-radius: 12px;
+        }
+        .sources h3 {
+            color: #667eea;
+            margin-top: 0;
+            margin-bottom: 20px;
+            font-size: 1.3em;
         }
         .source-item {
-            padding: 10px;
-            margin: 5px 0;
-            background: #e9ecef;
-            border-radius: 5px;
+            padding: 15px;
+            margin: 10px 0;
+            background: white;
+            border-radius: 8px;
+            border-left: 4px solid #764ba2;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .source-item:hover {
+            transform: translateX(5px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
         }
         .source-item a {
             color: #667eea;
             text-decoration: none;
+            font-weight: 500;
         }
         .source-item a:hover {
             text-decoration: underline;
@@ -83,33 +145,58 @@
             text-align: center;
             color: #667eea;
             font-style: italic;
+            padding: 40px;
+            font-size: 1.1em;
+        }
+        .error {
+            color: #dc3545;
+            background: #f8d7da;
+            padding: 20px;
+            border-radius: 8px;
+            border-left: 4px solid #dc3545;
         }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>🎙️ Sermon Knowledge Base</h1>
+        <p class="subtitle">Explore insights from over 1,800 sermons</p>
         
         <div class="search-section">
-            <h2>Ask About Sermon Teachings</h2>
-            <input type="text" id="queryInput" placeholder="What does the pastor teach about faith?" onkeypress="if(event.key==='Enter') askQuestion()">
-            <button onclick="askQuestion()">Search</button>
+            <div class="input-wrapper">
+                <input type="text" id="queryInput" placeholder="What does the pastor teach about faith, prayer, love...?" onkeypress="if(event.key==='Enter') askQuestion()" oninput="toggleClearBtn()">
+                <button class="clear-btn" id="clearBtn" onclick="clearSearch()" title="Clear">✕</button>
+                <button class="search-btn" onclick="askQuestion()">Search</button>
+            </div>
         </div>
         
         <div id="results"></div>
     </div>
 
     <script>
+        function toggleClearBtn() {
+            const input = document.getElementById('queryInput');
+            const clearBtn = document.getElementById('clearBtn');
+            clearBtn.style.display = input.value ? 'flex' : 'none';
+        }
+
+        function clearSearch() {
+            document.getElementById('queryInput').value = '';
+            document.getElementById('results').innerHTML = '';
+            toggleClearBtn();
+            document.getElementById('queryInput').focus();
+        }
+
         async function askQuestion() {
             const query = document.getElementById('queryInput').value.trim();
             const resultsDiv = document.getElementById('results');
             
             if (!query) {
-                resultsDiv.innerHTML = '<p style="color: red;">Please enter a question.</p>';
+                resultsDiv.innerHTML = '<p class="error">Please enter a question.</p>';
                 return;
             }
             
-            resultsDiv.innerHTML = '<p class="loading">Searching sermons and generating answer...</p>';
+            resultsDiv.innerHTML = '<p class="loading">🔍 Searching through sermons and generating answer...</p>';
             
             try {
                 const response = await fetch('https://sermon-knowledge-base-api.onrender.com/api/ask', {
@@ -121,22 +208,22 @@
                 const data = await response.json();
                 
                 if (data.status === 'success') {
-                    let html = `<div class="answer"><strong>Answer:</strong><br>${data.answer}</div>`;
+                    let html = `<div class="answer"><strong>Answer:</strong>${data.answer}</div>`;
                     
                     if (data.sources && data.sources.length > 0) {
-                        html += '<div class="sources"><h3>Source Sermons:</h3>';
-                        data.sources.forEach(source => {
-                            html += `<div class="source-item">📺 <a href="${source.url}" target="_blank">${source.title}</a></div>`;
+                        html += '<div class="sources"><h3>📚 Source Sermons (${data.sources.length})</h3>';
+                        data.sources.forEach((source, index) => {
+                            html += `<div class="source-item">${index + 1}. <a href="${source.url}" target="_blank">${source.title}</a> 🎥</div>`;
                         });
                         html += '</div>';
                     }
                     
                     resultsDiv.innerHTML = html;
                 } else {
-                    resultsDiv.innerHTML = `<p style="color: red;">Error: ${data.message || 'Unknown error'}</p>`;
+                    resultsDiv.innerHTML = `<p class="error">Error: ${data.message || 'Unknown error'}</p>`;
                 }
             } catch (error) {
-                resultsDiv.innerHTML = `<p style="color: red;">Error: ${error.message}</p>`;
+                resultsDiv.innerHTML = `<p class="error">Error: ${error.message}</p>`;
             }
         }
     </script>
