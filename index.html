@@ -231,7 +231,7 @@
                     let html = `<div class="answer"><strong>Answer:</strong>${data.answer}</div>`;
                     
                     if (data.sources && data.sources.length > 0) {
-                        html += '<div class="sources"><h3>📚 Source Sermons (${data.sources.length})</h3>';
+                        html += `<div class="sources"><h3>📚 Source Sermons (${data.sources.length})</h3>`;
                         data.sources.forEach((source, index) => {
                             html += `<div class="source-item">${index + 1}. <a href="${source.url}" target="_blank">${source.title}</a> 🎥</div>`;
                         });
