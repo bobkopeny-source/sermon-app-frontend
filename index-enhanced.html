@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pastor Bob's Sermon Database - AI Enhanced</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container { max-width: 1200px; margin: 0 auto; }
+        .header {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+            margin-bottom: 30px;
+            text-align: center;
+        }
+        h1 { color: #667eea; margin-bottom: 10px; }
+        .subtitle { color: #666; font-size: 18px; }
+        
+        .search-box {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+            margin-bottom: 30px;
+        }
+        .search-input {
+            width: 100%;
+            padding: 15px 20px;
+            font-size: 16px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            margin-bottom: 15px;
+            transition: border-color 0.3s;
+        }
+        .search-input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .filter-tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+        }
+        .filter-tab {
+            padding: 10px 20px;
+            background: #f5f5f5;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .filter-tab.active {
+            background: #667eea;
+            color: white;
+        }
+        
+        .search-btn {
+            width: 100%;
+            padding: 15px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        .search-btn:hover { background: #5568d3; }
+        .search-btn:disabled { background: #ccc; cursor: not-allowed; }
+        
+        .grok-synthesis {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 15px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+        }
+        .grok-synthesis h2 {
+            margin-bottom: 15px;
+        }
+        .grok-synthesis p {
+            line-height: 1.8;
+            font-size: 16px;
+        }
+        
+        .results {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+        }
+        .result-item {
+            padding: 20px;
+            border-left: 4px solid #667eea;
+            background: #f9f9f9;
+            margin-bottom: 20px;
+            border-radius: 8px;
+        }
+        .result-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 10px;
+        }
+        .result-meta {
+            color: #666;
+            font-size: 14px;
+            margin-bottom: 15px;
+        }
+        .youtube-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 20px;
+            background: #FF0000;
+            color: white;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 600;
+            margin-right: 10px;
+            transition: transform 0.2s;
+        }
+        .youtube-link:hover {
+            transform: translateY(-2px);
+        }
+        .transcript-preview {
+            margin-top: 15px;
+            padding: 15px;
+            background: white;
+            border-radius: 5px;
+            font-size: 14px;
+            line-height: 1.6;
+            color: #555;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #667eea;
+            font-size: 18px;
+        }
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎙️ Pastor Bob's Sermon Database</h1>
+            <p class="subtitle">1,654 Sermons • AI-Powered Search • Video Integration</p>
+        </div>
+        
+        <div class="search-box">
+            <input 
+                type="text" 
+                class="search-input" 
+                id="searchInput" 
+                placeholder="Search sermons... (e.g., 'Romans 9 sovereignty', 'grace and faith', 'January 2012')"
+            />
+            
+            <div class="filter-tabs">
+                <button class="filter-tab active" data-filter="all">All Content</button>
+                <button class="filter-tab" data-filter="scripture">By Scripture</button>
+                <button class="filter-tab" data-filter="topic">By Topic</button>
+                <button class="filter-tab" data-filter="date">By Date</button>
+            </div>
+            
+            <button class="search-btn" id="searchBtn">🔍 Search with AI Analysis</button>
+        </div>
+        
+        <div id="results"></div>
+    </div>
+
+    <script>
+        let currentFilter = 'all';
+        
+        document.querySelectorAll('.filter-tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                document.querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+                currentFilter = tab.dataset.filter;
+            });
+        });
+        
+        document.getElementById('searchBtn').addEventListener('click', performSearch);
+        document.getElementById('searchInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') performSearch();
+        });
+        
+        async function performSearch() {
+            const query = document.getElementById('searchInput').value.trim();
+            if (!query) return;
+            
+            const resultsDiv = document.getElementById('results');
+            const searchBtn = document.getElementById('searchBtn');
+            
+            searchBtn.disabled = true;
+            searchBtn.textContent = '🔄 Analyzing with Grok AI...';
+            
+            resultsDiv.innerHTML = '<div class="loading"><div class="spinner"></div><p>Searching 1,654 sermons and generating AI synthesis...</p></div>';
+            
+            try {
+                const response = await fetch('/.netlify/functions/search', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ query, filterType: currentFilter })
+                });
+                
+                const data = await response.json();
+                displayResults(data, query);
+                
+            } catch (error) {
+                resultsDiv.innerHTML = `<div class="results"><p style="color: red;">Error: ${error.message}</p></div>`;
+            } finally {
+                searchBtn.disabled = false;
+                searchBtn.textContent = '🔍 Search with AI Analysis';
+            }
+        }
+        
+        function displayResults(data, query) {
+            const resultsDiv = document.getElementById('results');
+            
+            let html = '';
+            
+            if (data.grokSynthesis) {
+                html += `
+                    <div class="grok-synthesis">
+                        <h2>🤖 AI Synthesis by Grok</h2>
+                        <p>${data.grokSynthesis}</p>
+                    </div>
+                `;
+            }
+            
+            html += `<div class="results">`;
+            html += `<h2>📚 Found ${data.totalResults} Sermons</h2><br>`;
+            
+            data.sermons.forEach(sermon => {
+                const excerpt = sermon.transcript.substring(0, 300) + '...';
+                const youtubeLink = sermon.youtubeVideo 
+                    ? `https://www.youtube.com/results?search_query=${encodeURIComponent(sermon.youtubeVideo.searchQuery)}`
+                    : null;
+                
+                html += `
+                    <div class="result-item">
+                        <div class="result-title">${sermon.title}</div>
+                        <div class="result-meta">
+                            📖 ${sermon.word_count?.toLocaleString() || 'N/A'} words
+                            ${sermon.youtubeVideo ? `• 📅 ${sermon.youtubeVideo.date}` : ''}
+                        </div>
+                        ${youtubeLink ? `
+                            <a href="${youtubeLink}" target="_blank" class="youtube-link">
+                                ▶️ Search on YouTube
+                            </a>
+                        ` : ''}
+                        <div class="transcript-preview">${excerpt}</div>
+                    </div>
+                `;
+            });
+            
+            html += `</div>`;
+            resultsDiv.innerHTML = html;
+        }
+    </script>
+</body>
+</html>
