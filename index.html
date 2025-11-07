@@ -3,248 +3,305 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🎙️ Sermon Knowledge Base</title>
+    <title>Pastor Bob's Sermon Database - AI Enhanced</title>
     <style>
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            max-width: 900px;
-            margin: 0 auto;
-            padding: 20px;
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
+            padding: 20px;
         }
-        .container {
+        .container { max-width: 1200px; margin: 0 auto; }
+        .header {
             background: white;
-            padding: 40px;
-            border-radius: 20px;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-        }
-        h1 {
-            color: #667eea;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+            margin-bottom: 30px;
             text-align: center;
-            margin-bottom: 10px;
-            font-size: 2.5em;
         }
-        .subtitle {
-            text-align: center;
-            color: #666;
-            margin-bottom: 40px;
-            font-size: 1.1em;
-        }
-        .search-section {
-            position: relative;
+        h1 { color: #667eea; margin-bottom: 10px; }
+        .subtitle { color: #666; font-size: 18px; }
+        
+        .search-box {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
             margin-bottom: 30px;
         }
-        .input-wrapper {
-            position: relative;
-            display: flex;
-            gap: 10px;
-            flex-direction: column;
-        }
-        input[type="text"] {
-            flex: 1;
-            padding: 15px 40px 15px 15px;
+        .search-input {
+            width: 100%;
+            padding: 15px 20px;
             font-size: 16px;
-            border: 2px solid #667eea;
+            border: 2px solid #e0e0e0;
             border-radius: 10px;
-            outline: none;
+            margin-bottom: 15px;
             transition: border-color 0.3s;
         }
-        input[type="text"]:focus {
-            border-color: #764ba2;
+        .search-input:focus {
+            outline: none;
+            border-color: #667eea;
         }
-            align-items: center;
-            justify-content: center;
+        
+        .filter-tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+        }
+        .filter-tab {
+            padding: 10px 20px;
+            background: #f5f5f5;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .filter-tab.active {
+            background: #667eea;
             color: white;
-            font-size: 16px;
-            line-height: 1;
         }
-        .clear-btn:hover {
-            background: #999;
-        }
-        button.search-btn {
-            padding: 15px 30px;
-            font-size: 16px;
+        
+        .search-btn {
+            width: 100%;
+            padding: 15px;
             background: #667eea;
             color: white;
             border: none;
             border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
             cursor: pointer;
             transition: background 0.3s;
-            font-weight: bold;
         }
-        button.search-btn:hover {
-            background: #5568d3;
-        }
-        button.search-btn:disabled {
-            background: #ccc;
-            cursor: not-allowed;
-        }
-        #results {
-            margin-top: 40px;
-        }
-        .answer {
-            white-space: pre-wrap;
-            background: linear-gradient(to right, #f8f9fa, #ffffff);
-            padding: 30px;
-            border-radius: 12px;
-            border-left: 6px solid #667eea;
-            margin-bottom: 30px;
-            line-height: 1.8;
-            font-size: 1.05em;
-        }
-        .answer strong {
-            color: #667eea;
-            font-size: 1.2em;
-            display: block;
-            margin-bottom: 8px;
-        }
-        .sources {
-            margin-top: 30px;
-            background: #f8f9fa;
-            padding: 25px;
-            border-radius: 12px;
-        }
-        .sources h3 {
-            color: #667eea;
-            margin-top: 0;
-            margin-bottom: 20px;
-            font-size: 1.3em;
-        }
-        .source-item {
-            padding: 15px;
-            margin: 10px 0;
-            background: white;
-            border-radius: 8px;
-            border-left: 4px solid #764ba2;
-            transition: transform 0.2s, box-shadow 0.2s;
-        }
-        .source-item:hover {
-            transform: translateX(5px);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-        }
-        .source-item a {
-            color: #667eea;
-            text-decoration: none;
-            font-weight: 500;
-        }
-        .source-item a:hover {
-            text-decoration: underline;
-        }
-        .loading {
-            text-align: center;
-            color: #667eea;
-            font-style: italic;
+        .search-btn:hover { background: #5568d3; }
+        .search-btn:disabled { background: #ccc; cursor: not-allowed; }
+        
+        .grok-synthesis {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
             padding: 40px;
-            font-size: 1.1em;
+            border-radius: 15px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
         }
-        .error {
-            color: #dc3545;
-            background: #f8d7da;
-            padding: 20px;
+        .grok-synthesis h2 {
+            margin-bottom: 20px;
+            font-size: 24px;
+        }
+        .grok-synthesis p {
+            line-height: 1.9;
+            font-size: 17px;
+            margin-bottom: 15px;
+            white-space: pre-wrap;
+        }
+        
+        .results {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+        }
+        .result-item {
+            padding: 25px;
+            border-left: 4px solid #667eea;
+            background: #f9f9f9;
+            margin-bottom: 25px;
             border-radius: 8px;
-            border-left: 4px solid #dc3545;
         }
-        .answer ul, .answer ol {
-            margin-left: 0;
-            padding-left: 20px;
-            list-style-position: outside;
-        }
-        .answer li {
-            margin-bottom: 8px;
-            line-height: 1.8;
-        }
-        .answer p {
+        .result-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #333;
             margin-bottom: 10px;
         }
-        .clear-btn {
-            background: #dc3545;
-            border: none;
-            border-radius: 50%;
-            width: 36px;
-            height: 36px;
-            cursor: pointer;
-            display: none;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-size: 18px;
-            font-weight: bold;
-            flex-shrink: 0;
+        .result-meta {
+            color: #666;
+            font-size: 14px;
+            margin-bottom: 15px;
         }
-        .clear-btn:hover {
-            background: #c82333;
+        .scripture-ref {
+            display: inline-block;
+            padding: 5px 12px;
+            background: #667eea;
+            color: white;
+            border-radius: 5px;
+            font-size: 13px;
+            font-weight: 600;
+            margin-right: 10px;
+        }
+        .youtube-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 24px;
+            background: #FF0000;
+            color: white;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 600;
+            transition: all 0.2s;
+            font-size: 15px;
+        }
+        .youtube-link:hover {
+            background: #cc0000;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(255,0,0,0.3);
+        }
+        .transcript-preview {
+            margin-top: 15px;
+            padding: 15px;
+            background: white;
+            border-radius: 5px;
+            font-size: 14px;
+            line-height: 1.7;
+            color: #555;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #667eea;
+            font-size: 18px;
+        }
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>🎙️ Sermon Knowledge Base</h1>
-        <p class="subtitle">Explore insights from over 1,800 sermons</p>
+        <div class="header">
+            <h1>🎙️ Pastor Bob's Sermon Database</h1>
+            <p class="subtitle">1,654 Sermons • AI-Powered Search • Video Integration</p>
+        </div>
         
-        <div class="search-section">
-            <div class="input-wrapper">
-                <input type="text" id="queryInput" placeholder="What does the pastor teach about faith, prayer, love...?" onkeypress="if(event.key==='Enter') askQuestion()" oninput="toggleClearBtn()">
-                <button class="clear-btn" id="clearBtn" onclick="clearSearch()" title="Clear">✕</button>
-                <button class="search-btn" onclick="askQuestion()">Search</button>
+        <div class="search-box">
+            <input 
+                type="text" 
+                class="search-input" 
+                id="searchInput" 
+                placeholder="Ask a question or search... (e.g., 'What does Pastor Bob teach about grace?', 'Romans 9', 'faith and works')"
+            />
+            
+            <div class="filter-tabs">
+                <button class="filter-tab active" data-filter="all">All Content</button>
+                <button class="filter-tab" data-filter="scripture">By Scripture</button>
+                <button class="filter-tab" data-filter="topic">By Topic</button>
+                <button class="filter-tab" data-filter="date">By Date</button>
             </div>
+            
+            <button class="search-btn" id="searchBtn">🔍 Search with AI Analysis</button>
         </div>
         
         <div id="results"></div>
     </div>
 
     <script>
-        function toggleClearBtn() {
-            const input = document.getElementById('queryInput');
-            const clearBtn = document.getElementById('clearBtn');
-            clearBtn.style.display = input.value ? 'flex' : 'none';
-        }
-
-        function clearSearch() {
-            document.getElementById('queryInput').value = '';
-            document.getElementById('results').innerHTML = '';
-            toggleClearBtn();
-            document.getElementById('queryInput').focus();
-        }
-
-        async function askQuestion() {
-            const query = document.getElementById('queryInput').value.trim();
+        let currentFilter = 'all';
+        
+        document.querySelectorAll('.filter-tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                document.querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+                currentFilter = tab.dataset.filter;
+            });
+        });
+        
+        document.getElementById('searchBtn').addEventListener('click', performSearch);
+        document.getElementById('searchInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') performSearch();
+        });
+        
+        async function performSearch() {
+            const query = document.getElementById('searchInput').value.trim();
+            if (!query) return;
+            
             const resultsDiv = document.getElementById('results');
+            const searchBtn = document.getElementById('searchBtn');
             
-            if (!query) {
-                resultsDiv.innerHTML = '<p class="error">Please enter a question.</p>';
-                return;
-            }
+            searchBtn.disabled = true;
+            searchBtn.textContent = '🔄 Analyzing with Grok AI...';
             
-            resultsDiv.innerHTML = '<p class="loading">🔍 Searching through sermons and generating answer...</p>';
+            resultsDiv.innerHTML = '<div class="loading"><div class="spinner"></div><p>Searching 1,654 sermons and generating comprehensive AI synthesis...</p></div>';
             
             try {
-                const response = await fetch('https://sermon-knowledge-base-api.onrender.com/api/ask', {
+                const response = await fetch('/.netlify/functions/search', {
                     method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({query: query})
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ query, filterType: currentFilter })
                 });
                 
                 const data = await response.json();
                 
-                if (data.status === 'success') {
-                    let html = `<div class="answer"><strong>Answer:</strong>${data.answer}</div>`;
-                    
-                    if (data.sources && data.sources.length > 0) {
-                        html += `<div class="sources"><h3>📚 Source Sermons (${data.sources.length})</h3>`;
-                        data.sources.forEach((source, index) => {
-                            html += `<div class="source-item">${index + 1}. <a href="${source.url}" target="_blank">${source.title}</a> 🎥</div>`;
-                        });
-                        html += '</div>';
-                    }
-                    
-                    resultsDiv.innerHTML = html;
-                } else {
-                    resultsDiv.innerHTML = `<p class="error">Error: ${data.message || 'Unknown error'}</p>`;
+                if (data.error) {
+                    throw new Error(data.error);
                 }
+                
+                displayResults(data, query);
+                
             } catch (error) {
-                resultsDiv.innerHTML = `<p class="error">Error: ${error.message}</p>`;
+                resultsDiv.innerHTML = `<div class="results"><p style="color: red; padding: 20px;">Error: ${error.message}<br><br>Please make sure the Grok API key is configured in Netlify.</p></div>`;
+            } finally {
+                searchBtn.disabled = false;
+                searchBtn.textContent = '🔍 Search with AI Analysis';
             }
+        }
+        
+        function displayResults(data, query) {
+            const resultsDiv = document.getElementById('results');
+            
+            let html = '';
+            
+            if (data.grokSynthesis) {
+                html += `
+                    <div class="grok-synthesis">
+                        <h2>🤖 AI Synthesis by Grok</h2>
+                        <p>${data.grokSynthesis}</p>
+                    </div>
+                `;
+            }
+            
+            html += `<div class="results">`;
+            html += `<h2 style="margin-bottom: 20px;">📚 Found ${data.totalResults} Relevant Sermons</h2>`;
+            
+            data.sermons.forEach(sermon => {
+                const excerpt = sermon.transcript ? sermon.transcript.substring(0, 400) + '...' : 'No transcript available';
+                
+                html += `
+                    <div class="result-item">
+                        <div class="result-title">${sermon.title}</div>
+                        <div class="result-meta">
+                            ${sermon.youtubeVideo && sermon.youtubeVideo.scripture ? `
+                                <span class="scripture-ref">${sermon.youtubeVideo.scripture}</span>
+                            ` : ''}
+                            📖 ${sermon.word_count?.toLocaleString() || 'N/A'} words
+                            ${sermon.youtubeVideo ? ` • 📅 ${sermon.youtubeVideo.date}` : ''}
+                        </div>
+                        ${sermon.youtubeVideo && sermon.youtubeVideo.youtubeUrl ? `
+                            <a href="${sermon.youtubeVideo.youtubeUrl}" target="_blank" class="youtube-link">
+                                ▶️ Watch on YouTube
+                            </a>
+                        ` : ''}
+                        <div class="transcript-preview">${excerpt}</div>
+                    </div>
+                `;
+            });
+            
+            html += `</div>`;
+            resultsDiv.innerHTML = html;
         }
     </script>
 </body>
