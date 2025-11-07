@@ -1,21 +1,4 @@
-const zlib = require('zlib');
 const fs = require('fs');
-
-let sermonsCache = null;
-
-function loadSermons() {
-  if (sermonsCache) return sermonsCache;
-  
-  try {
-    const compressed = fs.readFileSync('./PASTOR_BOB_COMPLETE_2072.json.gz');
-    const decompressed = zlib.gunzipSync(compressed);
-    sermonsCache = JSON.parse(decompressed.toString());
-    return sermonsCache;
-  } catch (e) {
-    console.error('Error loading sermons:', e);
-    return [];
-  }
-}
 
 exports.handler = async (event, context) => {
   try {
@@ -28,28 +11,30 @@ exports.handler = async (event, context) => {
       };
     }
     
-    const sermons = loadSermons();
+    const sermons = require('../../PASTOR_BOB_COMPLETE_2072.json');
     
-    if (!Array.isArray(sermons) || sermons.length === 0) {
-      throw new Error('Sermon database could not be loaded');
+    if (!Array.isArray(sermons)) {
+      throw new Error('Sermon database is not an array');
     }
     
     const results = searchSermons(sermons, query, filterType);
     const GROK_API_KEY = process.env.GROK_API_KEY;
     
     console.log('API Key exists:', !!GROK_API_KEY);
-    console.log('API Key starts with:', GROK_API_KEY ? GROK_API_KEY.substring(0, 10) : 'none');
+    console.log('Results found:', results.length);
     
     let grokAnalysis = null;
     if (GROK_API_KEY && results.length > 0) {
       try {
         grokAnalysis = await callGrok(results, query, GROK_API_KEY);
       } catch (error) {
-        console.error('Grok API error details:', error.message);
+        console.error('Grok API error:', error.message);
         grokAnalysis = `AI analysis error: ${error.message}`;
       }
+    } else if (!GROK_API_KEY) {
+      grokAnalysis = 'Grok API key not configured in Netlify environment variables.';
     } else {
-      grokAnalysis = 'Grok API key not configured. Please add GROK_API_KEY to Netlify environment variables.';
+      grokAnalysis = 'No matching sermons found for your query.';
     }
     
     const resultsWithVideos = results.map(sermon => ({
