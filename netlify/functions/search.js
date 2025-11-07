@@ -135,7 +135,7 @@ Write your comprehensive synthesis (6-8 substantial paragraphs):`;
         role: 'user', 
         content: prompt 
       }],
-      model: 'grok-beta',
+      model: 'grok-3',
       temperature: 0.85,
       max_tokens: 3000
     });
