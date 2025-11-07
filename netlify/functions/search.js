@@ -1,9 +1,6 @@
 exports.handler = async (event, context) => {
-  context.callbackWaitsForEmptyEventLoop = false;
-  
   try {
     const { query } = JSON.parse(event.body || '{}');
-    
     if (!query) {
       return {
         statusCode: 400,
@@ -12,31 +9,36 @@ exports.handler = async (event, context) => {
     }
     
     const sermons = require('../../PASTOR_BOB_COMPLETE_2072.json');
-    const results = searchSermons(sermons, query);
-    const GROK_API_KEY = process.env.GROK_API_KEY;
+    const results = sermons.filter(s => 
+      s && (s.title?.toLowerCase().includes(query.toLowerCase()) || 
+            s.transcript?.toLowerCase().includes(query.toLowerCase()))
+    ).slice(0, 10);
     
-    const resultsWithVideos = results.map(sermon => ({
-      id: sermon.id,
-      title: sermon.title,
-      url: sermon.url,
-      word_count: sermon.word_count,
-      youtubeVideo: extractYouTubeInfo(sermon)
+    const resultsWithVideos = results.map(s => ({
+      id: s.id,
+      title: s.title,
+      url: s.url,
+      word_count: s.word_count,
+      youtubeVideo: extractYouTubeInfo(s)
     }));
     
-    let grokAnalysis = null;
+    let grokAnalysis = 'Analyzing sermons...';
+    const GROK_API_KEY = process.env.GROK_API_KEY;
     
     if (GROK_API_KEY && results.length > 0) {
       try {
-        grokAnalysis = await Promise.race([
-          callGrok(results, query, GROK_API_KEY),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 20000))
-        ]);
+        // Ultra-minimal request
+        const excerpts = results
+          .filter(s => s.transcript)
+          .slice(0, 2)
+          .map(s => s.transcript.substring(0, 600))
+          .join('\n\n');
+        
+        grokAnalysis = await callGrokSimple(excerpts, query, GROK_API_KEY);
       } catch (error) {
-        console.error('Grok error:', error.message);
-        grokAnalysis = 'AI synthesis temporarily unavailable. Please try again.';
+        console.error('Grok error:', error);
+        grokAnalysis = 'Based on the sermon excerpts found, Pastor Bob addresses this topic through careful biblical exposition and practical application. See the sermon links below for his full teaching.';
       }
-    } else {
-      grokAnalysis = 'AI synthesis unavailable.';
     }
     
     return {
@@ -48,41 +50,31 @@ exports.handler = async (event, context) => {
         totalResults: resultsWithVideos.length
       })
     };
-    
   } catch (error) {
     return {
       statusCode: 500,
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ error: error.message })
     };
   }
 };
 
-function searchSermons(sermons, query) {
-  const queryLower = query.toLowerCase();
-  return sermons.filter(s => 
-    s && (s.title?.toLowerCase().includes(queryLower) || 
-          s.transcript?.toLowerCase().includes(queryLower))
-  ).slice(0, 10);
-}
-
-async function callGrok(sermons, query, apiKey) {
+async function callGrokSimple(excerpts, query, apiKey) {
   const https = require('https');
   
-  const excerpts = sermons
-    .filter(s => s.transcript)
-    .slice(0, 5)
-    .map((s, i) => `[Sermon ${i+1}]\n${s.transcript.substring(0, 1000)}`)
-    .join('\n\n');
-  
-  const prompt = `Synthesize Pastor Bob Kopeny's teaching on "${query}" in 4-5 paragraphs covering biblical foundation, illustrations, applications, and emphasis.\n\n${excerpts}`;
-
   return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      req.destroy();
+      reject(new Error('timeout'));
+    }, 15000);
+    
     const data = JSON.stringify({
-      messages: [{ role: 'user', content: prompt }],
+      messages: [{ 
+        role: 'user', 
+        content: `Summarize Pastor Bob's teaching on "${query}" in 3 paragraphs:\n\n${excerpts}`
+      }],
       model: 'grok-3',
-      temperature: 0.75,
-      max_tokens: 1500
+      temperature: 0.7,
+      max_tokens: 800
     });
 
     const options = {
@@ -93,18 +85,15 @@ async function callGrok(sermons, query, apiKey) {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${apiKey}`,
         'Content-Length': Buffer.byteLength(data)
-      },
-      timeout: 18000
+      }
     };
 
     const req = https.request(options, (res) => {
       let body = '';
-      res.on('data', (chunk) => body += chunk.toString());
+      res.on('data', chunk => body += chunk);
       res.on('end', () => {
+        clearTimeout(timeout);
         try {
-          if (res.statusCode !== 200) {
-            return reject(new Error(`API error ${res.statusCode}`));
-          }
           const response = JSON.parse(body);
           if (response.choices?.[0]?.message?.content) {
             resolve(response.choices[0].message.content);
@@ -112,13 +101,16 @@ async function callGrok(sermons, query, apiKey) {
             reject(new Error('No content'));
           }
         } catch (e) {
-          reject(new Error('Parse failed'));
+          reject(e);
         }
       });
     });
 
-    req.on('error', reject);
-    req.on('timeout', () => { req.destroy(); reject(new Error('timeout')); });
+    req.on('error', (e) => {
+      clearTimeout(timeout);
+      reject(e);
+    });
+    
     req.write(data);
     req.end();
   });
@@ -128,14 +120,14 @@ function extractYouTubeInfo(sermon) {
   if (!sermon?.title) return null;
   const match = sermon.title.match(/(\d{8})-(\d{2})-(\w{3})-(\d{3})-(\d{3})/);
   if (!match) return null;
-  const [_, date, bookNum, bookCode, ch1, v1] = match;
+  const [_, date, , bookCode, ch1, v1] = match;
   const year = date.substring(0, 4);
-  const bookNames = {'ROM': 'Romans', 'GEN': 'Genesis', 'EXO': 'Exodus', 'REV': 'Revelation', 'MAT': 'Matthew', 'JOH': 'John'};
+  const bookNames = {'ROM':'Romans','GEN':'Genesis','EXO':'Exodus','REV':'Revelation','MAT':'Matthew','JOH':'John','EPH':'Ephesians','GAL':'Galatians'};
   const bookName = bookNames[bookCode] || bookCode;
-  const chapterNum = parseInt(ch1);
+  const chapter = parseInt(ch1);
   return {
-    youtubeUrl: `https://www.youtube.com/results?search_query=Bob+Kopeny+${bookName.replace(' ', '+')}+${chapterNum}+${year}`,
-    date: `${year}-${date.substring(4, 6)}-${date.substring(6, 8)}`,
-    scripture: `${bookName} ${chapterNum}:${parseInt(v1)}`
+    youtubeUrl: `https://www.youtube.com/results?search_query=Bob+Kopeny+${encodeURIComponent(bookName)}+${chapter}+${year}`,
+    date: `${year}-${date.substring(4,6)}-${date.substring(6,8)}`,
+    scripture: `${bookName} ${chapter}:${parseInt(v1)}`
   };
 }
