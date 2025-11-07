@@ -1,6 +1,5 @@
 exports.handler = async (event, context) => {
   try {
-    // Parse request
     const { query, filterType } = JSON.parse(event.body || '{}');
     
     if (!query) {
@@ -10,31 +9,25 @@ exports.handler = async (event, context) => {
       };
     }
     
-    // Load sermon database
     const sermons = require('../../PASTOR_BOB_COMPLETE_1654.json');
     
     if (!Array.isArray(sermons)) {
       throw new Error('Sermon database is not an array');
     }
     
-    // Search sermons
     const results = searchSermons(sermons, query, filterType);
-    
-    // Get Grok API key
     const GROK_API_KEY = process.env.GROK_API_KEY;
     
-    // Call Grok (only if API key exists)
     let grokAnalysis = null;
     if (GROK_API_KEY && results.length > 0) {
       try {
         grokAnalysis = await callGrok(results, query, GROK_API_KEY);
       } catch (error) {
         console.error('Grok API error:', error);
-        grokAnalysis = 'AI analysis temporarily unavailable.';
+        grokAnalysis = 'AI analysis temporarily unavailable. Please try again.';
       }
     }
     
-    // Match YouTube videos
     const resultsWithVideos = results.map(sermon => ({
       ...sermon,
       youtubeVideo: extractYouTubeInfo(sermon)
@@ -57,8 +50,7 @@ exports.handler = async (event, context) => {
     return {
       statusCode: 500,
       body: JSON.stringify({ 
-        error: error.message,
-        stack: error.stack 
+        error: error.message
       })
     };
   }
@@ -77,30 +69,41 @@ function searchSermons(sermons, query, filterType) {
     const searchText = `${title} ${transcript}`;
     
     return searchText.includes(queryLower);
-  }).slice(0, 20);
+  }).slice(0, 15);
 }
 
 async function callGrok(sermons, query, apiKey) {
   const https = require('https');
   
+  // Get MORE content - up to 1500 chars per sermon
   const excerpts = sermons
     .filter(s => s && s.transcript)
-    .map(s => s.transcript.substring(0, 500))
+    .slice(0, 10)
+    .map((s, i) => {
+      const excerpt = s.transcript.substring(0, 1500);
+      return `[Sermon ${i + 1}]\n${excerpt}`;
+    })
     .join('\n\n---\n\n');
   
-  const prompt = `You are analyzing Pastor Bob Kopeny's sermons from Calvary Chapel East Anaheim.
+  const prompt = `You are analyzing Pastor Bob Kopeny's sermons from Calvary Chapel East Anaheim. He is known for his expository teaching, practical applications, personal illustrations, and pastoral warmth.
 
-Question: ${query}
+QUESTION: ${query}
 
-Based on these sermon excerpts, synthesize Pastor Bob's teaching on this topic. Include:
-1. His main theological/biblical points
-2. Key illustrations or stories he uses
-3. Practical applications he emphasizes
+TASK: Based on these sermon excerpts, write a comprehensive synthesis of Pastor Bob's teaching on this topic. Your response should be 4-6 paragraphs and include:
 
-Write in a warm, pastoral voice (2-3 paragraphs).
+1. OPENING: Introduce the topic and Pastor Bob's overall perspective
+2. THEOLOGICAL FOUNDATION: His main biblical/theological points with specific examples from the sermons
+3. ILLUSTRATIONS & STORIES: Key stories, analogies, or real-life examples he uses to illustrate these points
+4. PRACTICAL APPLICATION: How he applies these truths to daily Christian living
+5. PASTORAL EMPHASIS: Any repeated themes, warnings, or encouragements he gives
+6. CONCLUSION: Summarize the heart of his message on this topic
 
-Excerpts:
-${excerpts}`;
+Write in a warm, accessible, pastoral voice that mirrors Pastor Bob's teaching style. Be specific and detailed, drawing directly from the sermon content below.
+
+SERMON EXCERPTS:
+${excerpts}
+
+Write your comprehensive synthesis (4-6 paragraphs):`;
 
   return new Promise((resolve, reject) => {
     const data = JSON.stringify({
@@ -109,8 +112,8 @@ ${excerpts}`;
         content: prompt 
       }],
       model: 'grok-beta',
-      temperature: 0.7,
-      max_tokens: 500
+      temperature: 0.8,
+      max_tokens: 2000
     });
 
     const options = {
@@ -122,7 +125,7 @@ ${excerpts}`;
         'Authorization': `Bearer ${apiKey}`,
         'Content-Length': Buffer.byteLength(data)
       },
-      timeout: 30000
+      timeout: 45000
     };
 
     const req = https.request(options, (res) => {
@@ -165,9 +168,21 @@ function extractYouTubeInfo(sermon) {
   const month = date.substring(4, 6);
   const day = date.substring(6, 8);
   
+  // Create specific YouTube search that will actually work
+  const bookNames = {
+    'ROM': 'Romans', 'GEN': 'Genesis', 'EXO': 'Exodus', 'REV': 'Revelation',
+    'MAT': 'Matthew', 'JOH': 'John', 'EPH': 'Ephesians', 'GAL': 'Galatians'
+  };
+  
+  const bookName = bookNames[bookCode] || bookCode;
+  const chapterNum = parseInt(ch1);
+  const verseNum = parseInt(v1);
+  
   return {
     playlistId: 'PLEgYquYMZK-S5hMVvpeGJ4U-R627ZIQ94',
-    searchQuery: `Pastor Bob ${bookCode} ${parseInt(ch1)}:${parseInt(v1)}`,
-    date: `${year}-${month}-${day}`
+    searchQuery: `Bob Kopeny ${bookName} ${chapterNum} ${year}`,
+    youtubeUrl: `https://www.youtube.com/results?search_query=Bob+Kopeny+${encodeURIComponent(bookName)}+${chapterNum}+${year}`,
+    date: `${year}-${month}-${day}`,
+    scripture: `${bookName} ${chapterNum}:${verseNum}`
   };
 }

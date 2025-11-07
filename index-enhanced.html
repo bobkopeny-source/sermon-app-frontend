@@ -82,17 +82,20 @@
         .grok-synthesis {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
-            padding: 30px;
+            padding: 40px;
             border-radius: 15px;
             margin-bottom: 30px;
             box-shadow: 0 10px 40px rgba(0,0,0,0.2);
         }
         .grok-synthesis h2 {
-            margin-bottom: 15px;
+            margin-bottom: 20px;
+            font-size: 24px;
         }
         .grok-synthesis p {
-            line-height: 1.8;
-            font-size: 16px;
+            line-height: 1.9;
+            font-size: 17px;
+            margin-bottom: 15px;
+            white-space: pre-wrap;
         }
         
         .results {
@@ -102,10 +105,10 @@
             box-shadow: 0 10px 40px rgba(0,0,0,0.1);
         }
         .result-item {
-            padding: 20px;
+            padding: 25px;
             border-left: 4px solid #667eea;
             background: #f9f9f9;
-            margin-bottom: 20px;
+            margin-bottom: 25px;
             border-radius: 8px;
         }
         .result-title {
@@ -119,21 +122,33 @@
             font-size: 14px;
             margin-bottom: 15px;
         }
+        .scripture-ref {
+            display: inline-block;
+            padding: 5px 12px;
+            background: #667eea;
+            color: white;
+            border-radius: 5px;
+            font-size: 13px;
+            font-weight: 600;
+            margin-right: 10px;
+        }
         .youtube-link {
             display: inline-flex;
             align-items: center;
             gap: 8px;
-            padding: 10px 20px;
+            padding: 12px 24px;
             background: #FF0000;
             color: white;
             text-decoration: none;
             border-radius: 8px;
             font-weight: 600;
-            margin-right: 10px;
-            transition: transform 0.2s;
+            transition: all 0.2s;
+            font-size: 15px;
         }
         .youtube-link:hover {
+            background: #cc0000;
             transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(255,0,0,0.3);
         }
         .transcript-preview {
             margin-top: 15px;
@@ -141,7 +156,7 @@
             background: white;
             border-radius: 5px;
             font-size: 14px;
-            line-height: 1.6;
+            line-height: 1.7;
             color: #555;
         }
         
@@ -178,7 +193,7 @@
                 type="text" 
                 class="search-input" 
                 id="searchInput" 
-                placeholder="Search sermons... (e.g., 'Romans 9 sovereignty', 'grace and faith', 'January 2012')"
+                placeholder="Ask a question or search... (e.g., 'What does Pastor Bob teach about grace?', 'Romans 9', 'faith and works')"
             />
             
             <div class="filter-tabs">
@@ -220,7 +235,7 @@
             searchBtn.disabled = true;
             searchBtn.textContent = '🔄 Analyzing with Grok AI...';
             
-            resultsDiv.innerHTML = '<div class="loading"><div class="spinner"></div><p>Searching 1,654 sermons and generating AI synthesis...</p></div>';
+            resultsDiv.innerHTML = '<div class="loading"><div class="spinner"></div><p>Searching 1,654 sermons and generating comprehensive AI synthesis...</p></div>';
             
             try {
                 const response = await fetch('/.netlify/functions/search', {
@@ -230,10 +245,15 @@
                 });
                 
                 const data = await response.json();
+                
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+                
                 displayResults(data, query);
                 
             } catch (error) {
-                resultsDiv.innerHTML = `<div class="results"><p style="color: red;">Error: ${error.message}</p></div>`;
+                resultsDiv.innerHTML = `<div class="results"><p style="color: red; padding: 20px;">Error: ${error.message}<br><br>Please make sure the Grok API key is configured in Netlify.</p></div>`;
             } finally {
                 searchBtn.disabled = false;
                 searchBtn.textContent = '🔍 Search with AI Analysis';
@@ -255,24 +275,24 @@
             }
             
             html += `<div class="results">`;
-            html += `<h2>📚 Found ${data.totalResults} Sermons</h2><br>`;
+            html += `<h2 style="margin-bottom: 20px;">📚 Found ${data.totalResults} Relevant Sermons</h2>`;
             
             data.sermons.forEach(sermon => {
-                const excerpt = sermon.transcript.substring(0, 300) + '...';
-                const youtubeLink = sermon.youtubeVideo 
-                    ? `https://www.youtube.com/results?search_query=${encodeURIComponent(sermon.youtubeVideo.searchQuery)}`
-                    : null;
+                const excerpt = sermon.transcript ? sermon.transcript.substring(0, 400) + '...' : 'No transcript available';
                 
                 html += `
                     <div class="result-item">
                         <div class="result-title">${sermon.title}</div>
                         <div class="result-meta">
+                            ${sermon.youtubeVideo && sermon.youtubeVideo.scripture ? `
+                                <span class="scripture-ref">${sermon.youtubeVideo.scripture}</span>
+                            ` : ''}
                             📖 ${sermon.word_count?.toLocaleString() || 'N/A'} words
-                            ${sermon.youtubeVideo ? `• 📅 ${sermon.youtubeVideo.date}` : ''}
+                            ${sermon.youtubeVideo ? ` • 📅 ${sermon.youtubeVideo.date}` : ''}
                         </div>
-                        ${youtubeLink ? `
-                            <a href="${youtubeLink}" target="_blank" class="youtube-link">
-                                ▶️ Search on YouTube
+                        ${sermon.youtubeVideo && sermon.youtubeVideo.youtubeUrl ? `
+                            <a href="${sermon.youtubeVideo.youtubeUrl}" target="_blank" class="youtube-link">
+                                ▶️ Watch on YouTube
                             </a>
                         ` : ''}
                         <div class="transcript-preview">${excerpt}</div>
