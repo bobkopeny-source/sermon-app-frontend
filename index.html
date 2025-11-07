@@ -133,7 +133,25 @@
             font-weight: 600;
             margin-bottom: 4px;
         }
-        .video-date { color: #718096; font-size: 14px; }
+                .video-date { color: #718096; font-size: 14px; }
+        
+        .timestamp-link {
+            display: inline-flex;
+            align-items: center;
+            padding: 2px 8px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            text-decoration: none;
+            border-radius: 4px;
+            font-size: 13px;
+            font-weight: 600;
+            margin: 0 3px;
+            transition: all 0.2s;
+        }
+        .timestamp-link:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
         
         .loading-container { text-align: center; padding: 60px 20px; }
         .spinner {
@@ -240,6 +258,7 @@
             const synthesis = data.grokSynthesis || 'AI synthesis unavailable';
             const videos = data.sermons.filter(s => s.youtubeVideo).slice(0, 10);
             
+            // Support HTML links from backend
             const paragraphs = synthesis.split('\n\n')
                 .filter(p => p.trim())
                 .map(p => `<p>${p}</p>`)
