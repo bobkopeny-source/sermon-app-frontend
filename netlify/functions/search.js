@@ -1,5 +1,3 @@
-const fs = require('fs');
-
 exports.handler = async (event, context) => {
   try {
     const { query, filterType } = JSON.parse(event.body || '{}');
@@ -20,21 +18,24 @@ exports.handler = async (event, context) => {
     const results = searchSermons(sermons, query, filterType);
     const GROK_API_KEY = process.env.GROK_API_KEY;
     
-    console.log('API Key exists:', !!GROK_API_KEY);
-    console.log('Results found:', results.length);
-    
     let grokAnalysis = null;
     if (GROK_API_KEY && results.length > 0) {
       try {
-        grokAnalysis = await callGrok(results, query, GROK_API_KEY);
+        // Set a timeout promise
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Request timeout')), 25000)
+        );
+        
+        grokAnalysis = await Promise.race([
+          callGrok(results, query, GROK_API_KEY),
+          timeoutPromise
+        ]);
       } catch (error) {
         console.error('Grok API error:', error.message);
-        grokAnalysis = `AI analysis error: ${error.message}`;
+        grokAnalysis = `Unable to generate AI synthesis at this time. Please try again.`;
       }
     } else if (!GROK_API_KEY) {
-      grokAnalysis = 'Grok API key not configured in Netlify environment variables.';
-    } else {
-      grokAnalysis = 'No matching sermons found for your query.';
+      grokAnalysis = 'AI synthesis unavailable - API key not configured.';
     }
     
     const resultsWithVideos = results.map(sermon => ({
@@ -78,56 +79,42 @@ function searchSermons(sermons, query, filterType) {
     const searchText = `${title} ${transcript}`;
     
     return searchText.includes(queryLower);
-  }).slice(0, 20);
+  }).slice(0, 15);
 }
 
 async function callGrok(sermons, query, apiKey) {
   const https = require('https');
   
+  // Reduce sermon data to prevent timeout
   const sermonData = sermons
     .filter(s => s && s.transcript)
-    .slice(0, 12)
-    .map((s, i) => {
-      const excerpt = s.transcript.substring(0, 2000);
-      const videoInfo = extractYouTubeInfo(s);
+    .slice(0, 8)
+    .map((s) => {
+      const excerpt = s.transcript.substring(0, 1200); // Reduced from 2000
       return {
         excerpt,
-        title: s.title,
-        videoInfo
+        title: s.title
       };
     });
   
   const excerpts = sermonData.map((s, i) => 
-    `[Sermon ${i + 1}: ${s.title}]\n${s.excerpt}`
+    `[Sermon ${i + 1}]\n${s.excerpt}`
   ).join('\n\n---\n\n');
   
-  const videoList = sermonData
-    .filter(s => s.videoInfo)
-    .map((s, i) => `${i + 1}. ${s.videoInfo.scripture || s.title} - ${s.videoInfo.youtubeUrl}`)
-    .join('\n');
-  
-  const prompt = `You are synthesizing Pastor Bob Kopeny's teaching from Calvary Chapel East Anaheim. Pastor Bob is known for verse-by-verse expository preaching, practical applications, personal stories, and pastoral warmth.
+  const prompt = `You are synthesizing Pastor Bob Kopeny's teaching from Calvary Chapel East Anaheim on the topic: "${query}"
 
-QUESTION: ${query}
+Based on these sermon excerpts, write a comprehensive 5-6 paragraph synthesis covering:
+1. Biblical foundation and main principles
+2. Key illustrations and stories he uses
+3. Practical applications for believers
+4. His pastoral emphasis and encouragement
 
-TASK: Write a comprehensive 6-8 paragraph synthesis of Pastor Bob's teaching on this topic based on the sermon excerpts below.
+Be specific and detailed. Write in a warm pastoral voice.
 
-Structure:
-1. Introduction with biblical foundation
-2-3. Core theological principles with scripture references  
-4-5. Stories, analogies, and illustrations Pastor Bob uses
-6-7. Practical applications for daily Christian living
-8. Conclusion with pastoral encouragement
-
-Write in a warm, accessible pastoral voice. Be specific and detailed.
-
-SERMON EXCERPTS:
+EXCERPTS:
 ${excerpts}
 
-RELATED VIDEOS:
-${videoList}
-
-Write your comprehensive synthesis (6-8 substantial paragraphs):`;
+Write your synthesis (5-6 paragraphs):`;
 
   return new Promise((resolve, reject) => {
     const data = JSON.stringify({
@@ -136,8 +123,8 @@ Write your comprehensive synthesis (6-8 substantial paragraphs):`;
         content: prompt 
       }],
       model: 'grok-3',
-      temperature: 0.85,
-      max_tokens: 3000
+      temperature: 0.8,
+      max_tokens: 2000 // Reduced from 3000
     });
 
     const options = {
@@ -149,13 +136,11 @@ Write your comprehensive synthesis (6-8 substantial paragraphs):`;
         'Authorization': `Bearer ${apiKey}`,
         'Content-Length': Buffer.byteLength(data)
       },
-      timeout: 60000
+      timeout: 25000
     };
 
     const req = https.request(options, (res) => {
       let body = '';
-      
-      console.log('Grok API status:', res.statusCode);
       
       res.on('data', (chunk) => body += chunk);
       res.on('end', () => {
@@ -163,30 +148,25 @@ Write your comprehensive synthesis (6-8 substantial paragraphs):`;
           const response = JSON.parse(body);
           
           if (res.statusCode !== 200) {
-            console.error('Grok API error response:', body);
-            reject(new Error(`API returned ${res.statusCode}: ${response.error?.message || body}`));
+            reject(new Error(`API error ${res.statusCode}`));
             return;
           }
           
           if (response.choices && response.choices[0]) {
             resolve(response.choices[0].message.content);
           } else {
-            reject(new Error('Invalid Grok API response structure'));
+            reject(new Error('Invalid API response'));
           }
         } catch (e) {
-          reject(new Error(`Failed to parse API response: ${e.message}`));
+          reject(new Error('Failed to parse response'));
         }
       });
     });
 
-    req.on('error', (e) => {
-      console.error('Request error:', e);
-      reject(new Error(`Network error: ${e.message}`));
-    });
-    
+    req.on('error', (e) => reject(e));
     req.on('timeout', () => {
       req.destroy();
-      reject(new Error('Request timeout after 60 seconds'));
+      reject(new Error('Network timeout'));
     });
     
     req.write(data);
@@ -200,7 +180,7 @@ function extractYouTubeInfo(sermon) {
   const match = sermon.title.match(/(\d{8})-(\d{2})-(\w{3})-(\d{3})-(\d{3})-(\d{3})-(\d{3})/);
   if (!match) return null;
   
-  const [_, date, bookNum, bookCode, ch1, v1, ch2, v2] = match;
+  const [_, date, bookNum, bookCode, ch1, v1] = match;
   
   const year = date.substring(0, 4);
   const month = date.substring(4, 6);
@@ -217,8 +197,6 @@ function extractYouTubeInfo(sermon) {
   const verseNum = parseInt(v1);
   
   return {
-    playlistId: 'PLEgYquYMZK-S5hMVvpeGJ4U-R627ZIQ94',
-    searchQuery: `Bob Kopeny ${bookName} ${chapterNum} ${year}`,
     youtubeUrl: `https://www.youtube.com/results?search_query=Bob+Kopeny+${encodeURIComponent(bookName)}+${chapterNum}+${year}`,
     date: `${year}-${month}-${day}`,
     scripture: `${bookName} ${chapterNum}:${verseNum}`
