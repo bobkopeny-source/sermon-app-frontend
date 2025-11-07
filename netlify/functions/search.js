@@ -24,8 +24,10 @@ exports.handler = async (event, context) => {
         grokAnalysis = await callGrok(results, query, GROK_API_KEY);
       } catch (error) {
         console.error('Grok API error:', error);
-        grokAnalysis = 'AI analysis temporarily unavailable. Please try again.';
+        grokAnalysis = 'AI analysis temporarily unavailable. Please check your API key configuration.';
       }
+    } else {
+      grokAnalysis = 'Grok API key not configured. Please add GROK_API_KEY to Netlify environment variables.';
     }
     
     const resultsWithVideos = results.map(sermon => ({
@@ -69,41 +71,72 @@ function searchSermons(sermons, query, filterType) {
     const searchText = `${title} ${transcript}`;
     
     return searchText.includes(queryLower);
-  }).slice(0, 15);
+  }).slice(0, 20);
 }
 
 async function callGrok(sermons, query, apiKey) {
   const https = require('https');
   
-  // Get MORE content - up to 1500 chars per sermon
-  const excerpts = sermons
+  // Get substantial content from top sermons
+  const sermonData = sermons
     .filter(s => s && s.transcript)
-    .slice(0, 10)
+    .slice(0, 12)
     .map((s, i) => {
-      const excerpt = s.transcript.substring(0, 1500);
-      return `[Sermon ${i + 1}]\n${excerpt}`;
-    })
-    .join('\n\n---\n\n');
+      const excerpt = s.transcript.substring(0, 2000);
+      const videoInfo = extractYouTubeInfo(s);
+      return {
+        excerpt,
+        title: s.title,
+        videoInfo
+      };
+    });
   
-  const prompt = `You are analyzing Pastor Bob Kopeny's sermons from Calvary Chapel East Anaheim. He is known for his expository teaching, practical applications, personal illustrations, and pastoral warmth.
+  const excerpts = sermonData.map((s, i) => 
+    `[Sermon ${i + 1}: ${s.title}]\n${s.excerpt}`
+  ).join('\n\n---\n\n');
+  
+  const videoList = sermonData
+    .filter(s => s.videoInfo)
+    .map((s, i) => `${i + 1}. ${s.videoInfo.scripture || s.title} - ${s.videoInfo.youtubeUrl}`)
+    .join('\n');
+  
+  const prompt = `You are synthesizing Pastor Bob Kopeny's teaching from Calvary Chapel East Anaheim. Pastor Bob is known for:
+- Verse-by-verse expository preaching through entire books of the Bible
+- Practical, down-to-earth applications that connect biblical truth to everyday life
+- Personal stories and illustrations that make theology accessible
+- A warm, pastoral tone that balances depth with clarity
+- Emphasis on grace, the sovereignty of God, and practical Christian living
 
 QUESTION: ${query}
 
-TASK: Based on these sermon excerpts, write a comprehensive synthesis of Pastor Bob's teaching on this topic. Your response should be 4-6 paragraphs and include:
+TASK: Write a comprehensive 6-8 paragraph synthesis of Pastor Bob's teaching on this topic based on the sermon excerpts below. Structure your response as follows:
 
-1. OPENING: Introduce the topic and Pastor Bob's overall perspective
-2. THEOLOGICAL FOUNDATION: His main biblical/theological points with specific examples from the sermons
-3. ILLUSTRATIONS & STORIES: Key stories, analogies, or real-life examples he uses to illustrate these points
-4. PRACTICAL APPLICATION: How he applies these truths to daily Christian living
-5. PASTORAL EMPHASIS: Any repeated themes, warnings, or encouragements he gives
-6. CONCLUSION: Summarize the heart of his message on this topic
+**PARAGRAPH 1 - INTRODUCTION:** 
+Start with an engaging opening that introduces the topic and Pastor Bob's overall perspective. Mention the biblical foundation.
 
-Write in a warm, accessible, pastoral voice that mirrors Pastor Bob's teaching style. Be specific and detailed, drawing directly from the sermon content below.
+**PARAGRAPHS 2-3 - THEOLOGICAL FOUNDATION:**
+Explain the core biblical/theological principles Pastor Bob teaches on this topic. Include specific scripture references and theological concepts he emphasizes. Be detailed and substantive.
+
+**PARAGRAPHS 4-5 - ILLUSTRATIONS & STORIES:**
+Share the specific stories, analogies, or real-life examples Pastor Bob uses to illustrate these truths. These make his teaching memorable - include them in detail.
+
+**PARAGRAPH 6-7 - PRACTICAL APPLICATION:**
+Explain how Pastor Bob applies these truths to daily Christian living. What does he tell people to DO with this teaching? What warnings or encouragements does he give?
+
+**PARAGRAPH 8 - CONCLUSION:**
+Summarize the heart of his message with a pastoral call to action or encouragement.
+
+Throughout your synthesis, naturally reference "as Pastor Bob teaches in his sermon on [topic]" to indicate where specific points come from.
+
+Write in a warm, accessible, pastoral voice. Make it feel like a comprehensive pastoral teaching that draws from multiple sermons. Be specific, detailed, and substantive - this should be a thorough treatment of the topic.
 
 SERMON EXCERPTS:
 ${excerpts}
 
-Write your comprehensive synthesis (4-6 paragraphs):`;
+RELATED VIDEO SERMONS:
+${videoList}
+
+Write your comprehensive synthesis (6-8 substantial paragraphs):`;
 
   return new Promise((resolve, reject) => {
     const data = JSON.stringify({
@@ -112,8 +145,8 @@ Write your comprehensive synthesis (4-6 paragraphs):`;
         content: prompt 
       }],
       model: 'grok-beta',
-      temperature: 0.8,
-      max_tokens: 2000
+      temperature: 0.85,
+      max_tokens: 3000
     });
 
     const options = {
@@ -125,7 +158,7 @@ Write your comprehensive synthesis (4-6 paragraphs):`;
         'Authorization': `Bearer ${apiKey}`,
         'Content-Length': Buffer.byteLength(data)
       },
-      timeout: 45000
+      timeout: 60000
     };
 
     const req = https.request(options, (res) => {
@@ -168,10 +201,10 @@ function extractYouTubeInfo(sermon) {
   const month = date.substring(4, 6);
   const day = date.substring(6, 8);
   
-  // Create specific YouTube search that will actually work
   const bookNames = {
     'ROM': 'Romans', 'GEN': 'Genesis', 'EXO': 'Exodus', 'REV': 'Revelation',
-    'MAT': 'Matthew', 'JOH': 'John', 'EPH': 'Ephesians', 'GAL': 'Galatians'
+    'MAT': 'Matthew', 'JOH': 'John', 'EPH': 'Ephesians', 'GAL': 'Galatians',
+    'PSA': 'Psalms', 'PRO': 'Proverbs', 'ISA': 'Isaiah', 'JER': 'Jeremiah'
   };
   
   const bookName = bookNames[bookCode] || bookCode;
