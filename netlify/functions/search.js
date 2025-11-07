@@ -9,7 +9,7 @@ exports.handler = async (event, context) => {
       };
     }
     
-    const sermons = require('../../PASTOR_BOB_COMPLETE_1654.json');
+    const sermons = require('../../PASTOR_BOB_COMPLETE_2072.json');
     
     if (!Array.isArray(sermons)) {
       throw new Error('Sermon database is not an array');
