@@ -56,7 +56,6 @@ const BOOK_NAMES = {
 };
 
 function detectScripture(query) {
-  // Match patterns like "Acts 6:1", "Romans 9", "1 Cor 13:4-7"
   const pattern = /^(\d?\s*[a-z]+)\s*(\d+)(?::(\d+)(?:-(\d+))?)?$/i;
   const match = query.trim().match(pattern);
   
@@ -117,15 +116,18 @@ function extractTimestampedSegments(sermon, maxSegments = 6) {
 }
 
 function searchSermons(sermons, query) {
-  // First check if it's a scripture reference
   const scripture = detectScripture(query);
   
   if (scripture) {
-    // Scripture search
+    // Scripture search - check BOTH title and transcript
     const matches = sermons.filter(s => {
-      if (!s || !s.title) return false;
-      const title = s.title.toLowerCase();
-      return scripture.searchTerms.every(term => title.includes(term));
+      if (!s) return false;
+      const title = (s.title || '').toLowerCase();
+      const transcript = (s.transcript || '').toLowerCase();
+      const searchText = title + ' ' + transcript;
+      
+      // Book name and chapter must both appear
+      return scripture.searchTerms.every(term => searchText.includes(term));
     });
     
     return {
@@ -142,7 +144,7 @@ function searchSermons(sermons, query) {
     return { type: 'keyword', keywords: [], sermons: [], segments: [] };
   }
   
-  const threshold = Math.max(1, Math.floor(keywords.length * 0.4)); // 40% match required
+  const threshold = Math.max(1, Math.floor(keywords.length * 0.4));
   
   const scored = sermons.map(s => {
     if (!s) return null;
