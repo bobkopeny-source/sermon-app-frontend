@@ -24,31 +24,30 @@ exports.handler = async (event, context) => {
     const sermons = loadAllSermons();
     const queryLower = query.toLowerCase();
     
-    // Simple search
     const results = sermons.filter(s => 
       s && (s.title?.toLowerCase().includes(queryLower) || 
             s.transcript?.toLowerCase().includes(queryLower))
     ).slice(0, 10);
     
     let grokAnalysis = 'Analyzing...';
-    const GROK_API_KEY = process.env.GROK_API_KEY;
+    const OPENAI_API_KEY = process.env.opeaikey || process.env.OPENAI_API_KEY;
     
-    if (GROK_API_KEY && results.length > 0) {
+    if (OPENAI_API_KEY && results.length > 0) {
       try {
         const excerpts = results
           .filter(s => s.transcript)
-          .slice(0, 2)
-          .map(s => s.transcript.substring(0, 800))
+          .slice(0, 3)
+          .map(s => s.transcript.substring(0, 1000))
           .join('\n\n');
         
-        grokAnalysis = await callGrok(excerpts, query, GROK_API_KEY);
+        grokAnalysis = await callOpenAI(excerpts, query, OPENAI_API_KEY);
       } catch (error) {
-        console.error('Grok error:', error);
-        grokAnalysis = `Pastor Bob has ${results.length} sermon${results.length > 1 ? 's' : ''} on "${query}". See the videos below for his teaching.`;
+        console.error('OpenAI error:', error);
+        grokAnalysis = `Pastor Bob has ${results.length} sermon${results.length > 1 ? 's' : ''} on "${query}". See the videos below.`;
       }
     } else {
       grokAnalysis = results.length > 0 
-        ? `Found ${results.length} relevant sermons on "${query}".`
+        ? `Found ${results.length} sermons on "${query}".`
         : 'No sermons found. Try different keywords.';
     }
     
@@ -76,26 +75,29 @@ exports.handler = async (event, context) => {
   }
 };
 
-async function callGrok(excerpts, query, apiKey) {
+async function callOpenAI(excerpts, query, apiKey) {
   const https = require('https');
   
   return new Promise((resolve, reject) => {
     const timeout = setTimeout(() => {
       req.destroy();
-      resolve(`Pastor Bob addresses "${query}" in multiple sermons. His teaching emphasizes biblical truth and practical application. See the sermon videos below for his full exposition.`);
-    }, 10000); // 10 second timeout with good fallback
+      reject(new Error('timeout'));
+    }, 8000);
     
-    const prompt = `Summarize Pastor Bob Kopeny's teaching on "${query}" in 3 concise paragraphs based on these sermon excerpts:\n\n${excerpts}`;
+    const prompt = `Summarize Pastor Bob Kopeny's teaching on "${query}" in 3-4 detailed paragraphs based on these sermon excerpts. Write in a clear, pastoral tone:\n\n${excerpts}`;
     
     const data = JSON.stringify({
-      messages: [{ role: 'user', content: prompt }],
-      model: 'grok-3',
+      model: 'gpt-4o-mini',
+      messages: [
+        { role: 'system', content: 'You are summarizing Pastor Bob Kopeny\'s biblical teaching from Calvary Chapel East Anaheim. Write clear, pastoral summaries.' },
+        { role: 'user', content: prompt }
+      ],
       temperature: 0.7,
-      max_tokens: 600
+      max_tokens: 800
     });
 
     const options = {
-      hostname: 'api.x.ai',
+      hostname: 'api.openai.com',
       path: '/v1/chat/completions',
       method: 'POST',
       headers: {
@@ -115,17 +117,17 @@ async function callGrok(excerpts, query, apiKey) {
           if (response.choices?.[0]?.message?.content) {
             resolve(response.choices[0].message.content);
           } else {
-            resolve(`Pastor Bob has teaching on "${query}". See the sermon videos below for his exposition.`);
+            reject(new Error('No content'));
           }
         } catch (e) {
-          resolve(`Pastor Bob addresses "${query}" in his sermons. See the videos below for his teaching.`);
+          reject(e);
         }
       });
     });
 
-    req.on('error', () => {
+    req.on('error', (e) => {
       clearTimeout(timeout);
-      resolve(`See the sermon videos below for Pastor Bob's teaching on "${query}".`);
+      reject(e);
     });
     
     req.write(data);
