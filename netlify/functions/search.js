@@ -26,7 +26,7 @@ exports.handler = async (event, context) => {
     
     const results = sermons.filter(s => 
       s && (s.title?.toLowerCase().includes(queryLower) || 
-            s.transcript?.toLowerCase().includes(queryLower))
+            s.transcript?.toLowerCase().replace(/\[\d+:\d+:\d+\]/g, " ").includes(queryLower))
     ).slice(0, 10);
     
     let grokAnalysis = `Found ${results.length} sermons on "${query}". See the videos below.`;
