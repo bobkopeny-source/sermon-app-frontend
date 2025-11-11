@@ -10,7 +10,7 @@ function loadAllSermons() {
   const part5 = require('../../SERMONS_PART_5.json');
   
   sermonsCache = [...part1, ...part2, ...part3, ...part4, ...part5];
-  console.log(`Loaded ${sermonsCache.length} sermons`);
+  console.log( `Loaded ${sermonsCache.length} sermons`);
   return sermonsCache;
 }
 
