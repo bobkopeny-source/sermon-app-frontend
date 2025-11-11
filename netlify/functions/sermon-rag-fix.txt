@@ -1,0 +1,23 @@
+Find this section in sermon-rag.js:
+
+  if (scripture) {
+    // Scripture search
+    const matches = sermons.filter(s => {
+      if (!s || !s.title) return false;
+      const title = s.title.toLowerCase();
+      return scripture.searchTerms.every(term => title.includes(term));
+    });
+
+Replace with:
+
+  if (scripture) {
+    // Scripture search - check BOTH title and transcript
+    const matches = sermons.filter(s => {
+      if (!s) return false;
+      const title = (s.title || '').toLowerCase();
+      const transcript = (s.transcript || '').toLowerCase();
+      const searchText = title + ' ' + transcript;
+      
+      // Check if book name and chapter appear together
+      return scripture.searchTerms.every(term => searchText.includes(term));
+    });
