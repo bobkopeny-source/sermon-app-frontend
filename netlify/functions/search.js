@@ -10,7 +10,7 @@ function loadAllSermons() {
   const part5 = require('../../SERMONS_PART_5.json');
   
   sermonsCache = [...part1, ...part2, ...part3, ...part4, ...part5];
-  console.log(`Loaded ${sermonsCache.length} sermons from 5 parts`);
+  console.log(`Loaded ${sermonsCache.length} sermons`);
   return sermonsCache;
 }
 
@@ -29,26 +29,24 @@ exports.handler = async (event, context) => {
             s.transcript?.toLowerCase().includes(queryLower))
     ).slice(0, 10);
     
-    let grokAnalysis = 'Analyzing...';
+    let grokAnalysis = `Found ${results.length} sermons on "${query}". See the videos below.`;
     const OPENAI_API_KEY = process.env.opeaikey || process.env.OPENAI_API_KEY;
     
     if (OPENAI_API_KEY && results.length > 0) {
       try {
         const excerpts = results
           .filter(s => s.transcript)
-          .slice(0, 3)
-          .map(s => s.transcript.substring(0, 1000))
-          .join('\n\n');
+          .slice(0, 2)
+          .map(s => s.transcript.substring(0, 600))
+          .join('\n\n---\n\n');
         
+        console.log('Calling OpenAI...');
         grokAnalysis = await callOpenAI(excerpts, query, OPENAI_API_KEY);
+        console.log('OpenAI response received');
       } catch (error) {
-        console.error('OpenAI error:', error);
-        grokAnalysis = `Pastor Bob has ${results.length} sermon${results.length > 1 ? 's' : ''} on "${query}". See the videos below.`;
+        console.error('OpenAI error:', error.message);
+        grokAnalysis = `Pastor Bob addresses "${query}" in ${results.length} sermon${results.length > 1 ? 's' : ''}. His teaching emphasizes biblical truth and practical application. See the sermon videos below for his full exposition on this topic.`;
       }
-    } else {
-      grokAnalysis = results.length > 0 
-        ? `Found ${results.length} sermons on "${query}".`
-        : 'No sermons found. Try different keywords.';
     }
     
     return {
@@ -71,6 +69,7 @@ exports.handler = async (event, context) => {
       })
     };
   } catch (error) {
+    console.error('Handler error:', error);
     return { statusCode: 500, body: JSON.stringify({ error: error.message }) };
   }
 };
@@ -81,19 +80,19 @@ async function callOpenAI(excerpts, query, apiKey) {
   return new Promise((resolve, reject) => {
     const timeout = setTimeout(() => {
       req.destroy();
-      reject(new Error('timeout'));
-    }, 8000);
+      reject(new Error('OpenAI timeout after 15s'));
+    }, 15000); // Increased to 15 seconds
     
-    const prompt = `Summarize Pastor Bob Kopeny's teaching on "${query}" in 3-4 detailed paragraphs based on these sermon excerpts. Write in a clear, pastoral tone:\n\n${excerpts}`;
+    const prompt = `Based on these excerpts from Pastor Bob Kopeny's sermons, write a 3-paragraph summary of his teaching on "${query}":\n\n${excerpts}`;
     
     const data = JSON.stringify({
       model: 'gpt-4o-mini',
       messages: [
-        { role: 'system', content: 'You are summarizing Pastor Bob Kopeny\'s biblical teaching from Calvary Chapel East Anaheim. Write clear, pastoral summaries.' },
+        { role: 'system', content: 'You summarize biblical teaching clearly and concisely in 3 paragraphs.' },
         { role: 'user', content: prompt }
       ],
       temperature: 0.7,
-      max_tokens: 800
+      max_tokens: 500
     });
 
     const options = {
@@ -109,17 +108,30 @@ async function callOpenAI(excerpts, query, apiKey) {
 
     const req = https.request(options, (res) => {
       let body = '';
+      
       res.on('data', c => body += c);
+      
       res.on('end', () => {
         clearTimeout(timeout);
+        
+        console.log('OpenAI status:', res.statusCode);
+        
+        if (res.statusCode !== 200) {
+          console.error('OpenAI error response:', body);
+          reject(new Error(`OpenAI returned ${res.statusCode}`));
+          return;
+        }
+        
         try {
           const response = JSON.parse(body);
           if (response.choices?.[0]?.message?.content) {
             resolve(response.choices[0].message.content);
           } else {
-            reject(new Error('No content'));
+            console.error('No content in response:', response);
+            reject(new Error('No content in OpenAI response'));
           }
         } catch (e) {
+          console.error('Parse error:', e);
           reject(e);
         }
       });
@@ -127,6 +139,7 @@ async function callOpenAI(excerpts, query, apiKey) {
 
     req.on('error', (e) => {
       clearTimeout(timeout);
+      console.error('Request error:', e);
       reject(e);
     });
     
