@@ -1,3 +1,19 @@
+let sermonsCache = null;
+
+function loadAllSermons() {
+  if (sermonsCache) return sermonsCache;
+  
+  const part1 = require('../../SERMONS_PART_1.json');
+  const part2 = require('../../SERMONS_PART_2.json');
+  const part3 = require('../../SERMONS_PART_3.json');
+  const part4 = require('../../SERMONS_PART_4.json');
+  const part5 = require('../../SERMONS_PART_5.json');
+  
+  sermonsCache = [...part1, ...part2, ...part3, ...part4, ...part5];
+  console.log(`Loaded ${sermonsCache.length} sermons from 5 parts`);
+  return sermonsCache;
+}
+
 exports.handler = async (event, context) => {
   try {
     const { query } = JSON.parse(event.body || '{}');
@@ -5,7 +21,7 @@ exports.handler = async (event, context) => {
       return { statusCode: 400, body: JSON.stringify({ error: 'Query required' }) };
     }
     
-    const sermons = require('../../PASTOR_BOB_COMPLETE_2072.json');
+    const sermons = loadAllSermons();
     const queryLower = query.toLowerCase();
     
     // Search with more results for better context
