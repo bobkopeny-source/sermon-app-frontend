@@ -34,16 +34,20 @@ exports.handler = async (event, context) => {
       try {
         const excerpts = results
           .filter(s => s.transcript)
-          .slice(0, 4)
-          .map(s => s.transcript.substring(0, 1000))
+          .slice(0, 3)
+          .map(s => {
+            const title = s.title || 'Untitled';
+            const text = s.transcript.substring(0, 1000);
+            return `From "${title}":\n${text}`;
+          })
           .join('\n\n---\n\n');
         
-        console.log('Calling OpenAI with', excerpts.length, 'chars');
+        console.log('Calling OpenAI...');
         analysis = await callOpenAI(excerpts, query, KEY);
-        console.log('OpenAI success');
+        console.log('OpenAI responded successfully');
       } catch (e) {
-        console.error('OpenAI failed:', e.message);
-        analysis = `Pastor Bob has ${results.length} sermons addressing "${query}". His teaching emphasizes biblical truth and practical application.`;
+        console.error('OpenAI error:', e.message);
+        analysis = `Pastor Bob addresses "${query}" in ${results.length} sermons. His teaching emphasizes biblical truth and practical application. See the sermon videos below for his full teaching.`;
       }
     }
     
@@ -52,11 +56,22 @@ exports.handler = async (event, context) => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         grokSynthesis: analysis,
-        sermons: [],
+        sermons: results.slice(0, 10).map(s => ({
+          id: s.id,
+          title: s.title,
+          url: s.url,
+          word_count: s.word_count,
+          youtubeVideo: s.url ? {
+            youtubeUrl: s.url,
+            date: extractDate(s.title),
+            scripture: s.title.split('|')[0]?.trim() || s.title.substring(0, 60)
+          } : null
+        })),
         totalResults: results.length
       })
     };
   } catch (error) {
+    console.error('Handler error:', error);
     return { statusCode: 500, body: JSON.stringify({ error: error.message }) };
   }
 };
@@ -65,31 +80,30 @@ async function callOpenAI(excerpts, query, key) {
   const https = require('https');
   
   return new Promise((resolve, reject) => {
-    const to = setTimeout(() => { 
-      req.destroy(); 
-      reject(new Error('OpenAI timeout after 20s'));
-    }, 20000); // Increased to 20 seconds
+    const timeout = setTimeout(() => {
+      req.destroy();
+      reject(new Error('OpenAI timeout'));
+    }, 18000);
     
-    const prompt = `Based on these excerpts from Pastor Bob Kopeny's sermons at Calvary Chapel East Anaheim, write a comprehensive 4-5 paragraph summary of his biblical teaching on "${query}". 
+    const prompt = `Based on these sermon excerpts from Pastor Bob Kopeny at Calvary Chapel East Anaheim, write a comprehensive 4-5 paragraph answer about his teaching on "${query}".
 
-Write in a clear, pastoral tone. Focus on the theological points, practical applications, and scriptural foundations he emphasizes. Do not include any citations, timestamps, or references.
+Focus on the theological content, scriptural foundations, and practical applications. Write in a clear, pastoral tone.
 
-Sermon excerpts:
 ${excerpts}
 
-Write the summary:`;
+Write your summary:`;
     
     const data = JSON.stringify({
       model: 'gpt-4o-mini',
       messages: [
-        { role: 'system', content: 'You are summarizing Pastor Bob Kopeny\'s biblical teaching. Write comprehensive, flowing paragraphs without citations.' },
+        { role: 'system', content: 'You summarize Pastor Bob Kopeny\'s biblical teaching clearly and comprehensively in 4-5 paragraphs.' },
         { role: 'user', content: prompt }
       ],
       temperature: 0.7,
-      max_tokens: 1000
+      max_tokens: 900
     });
 
-    const opts = {
+    const options = {
       hostname: 'api.openai.com',
       path: '/v1/chat/completions',
       method: 'POST',
@@ -100,38 +114,41 @@ Write the summary:`;
       }
     };
 
-    const req = https.request(opts, res => {
+    const req = https.request(options, (res) => {
       let body = '';
       res.on('data', c => body += c);
       res.on('end', () => {
-        clearTimeout(to);
-        console.log('OpenAI response status:', res.statusCode);
+        clearTimeout(timeout);
+        console.log('OpenAI status:', res.statusCode);
         if (res.statusCode !== 200) {
-          console.error('OpenAI error body:', body);
-          return reject(new Error(`OpenAI returned ${res.statusCode}`));
+          console.error('OpenAI error:', body);
+          return reject(new Error(`Status ${res.statusCode}`));
         }
         try {
-          const r = JSON.parse(body);
-          const content = r.choices?.[0]?.message?.content;
-          if (!content) {
-            console.error('No content in response');
-            return reject(new Error('No content'));
+          const response = JSON.parse(body);
+          const content = response.choices?.[0]?.message?.content;
+          if (content) {
+            resolve(content);
+          } else {
+            reject(new Error('No content in response'));
           }
-          resolve(content);
         } catch (e) {
-          console.error('Parse error:', e);
           reject(e);
         }
       });
     });
 
-    req.on('error', e => { 
-      clearTimeout(to); 
-      console.error('Request error:', e);
-      reject(e); 
+    req.on('error', (e) => {
+      clearTimeout(timeout);
+      reject(e);
     });
     
     req.write(data);
     req.end();
   });
+}
+
+function extractDate(title) {
+  const m = title.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  return m ? `${m[3]}-${m[1].padStart(2,'0')}-${m[2].padStart(2,'0')}` : '';
 }
