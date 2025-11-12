@@ -25,7 +25,7 @@ exports.handler = async (event, context) => {
     const results = sermons.filter(s => 
       s && (s.title?.toLowerCase().includes(queryLower) || 
             s.transcript?.toLowerCase().replace(/\[\d+:\d+:\d+\]/g, " ").includes(queryLower))
-    ).slice(0, 10);
+    ).slice(0, 15);
     
     let analysis = `Found ${results.length} sermons on "${query}".`;
     const KEY = process.env.opeaikey || process.env.OPENAI_API_KEY;
@@ -34,13 +34,15 @@ exports.handler = async (event, context) => {
       try {
         const excerpts = results
           .filter(s => s.transcript)
-          .slice(0, 3)
-          .map(s => s.transcript.substring(0, 800))
+          .slice(0, 4)
+          .map(s => s.transcript.substring(0, 1000))
           .join('\n\n---\n\n');
         
+        console.log('Calling OpenAI with', excerpts.length, 'chars');
         analysis = await callOpenAI(excerpts, query, KEY);
+        console.log('OpenAI success');
       } catch (e) {
-        console.error('AI error:', e.message);
+        console.error('OpenAI failed:', e.message);
         analysis = `Pastor Bob has ${results.length} sermons addressing "${query}". His teaching emphasizes biblical truth and practical application.`;
       }
     }
@@ -63,18 +65,28 @@ async function callOpenAI(excerpts, query, key) {
   const https = require('https');
   
   return new Promise((resolve, reject) => {
-    const to = setTimeout(() => { req.destroy(); reject(new Error('timeout')); }, 15000);
+    const to = setTimeout(() => { 
+      req.destroy(); 
+      reject(new Error('OpenAI timeout after 20s'));
+    }, 20000); // Increased to 20 seconds
     
-    const prompt = `Write 4-5 comprehensive paragraphs summarizing Pastor Bob Kopeny's biblical teaching on "${query}" based on these sermon excerpts. Write in a clear, pastoral tone without any citations or timestamps:\n\n${excerpts}`;
+    const prompt = `Based on these excerpts from Pastor Bob Kopeny's sermons at Calvary Chapel East Anaheim, write a comprehensive 4-5 paragraph summary of his biblical teaching on "${query}". 
+
+Write in a clear, pastoral tone. Focus on the theological points, practical applications, and scriptural foundations he emphasizes. Do not include any citations, timestamps, or references.
+
+Sermon excerpts:
+${excerpts}
+
+Write the summary:`;
     
     const data = JSON.stringify({
       model: 'gpt-4o-mini',
       messages: [
-        { role: 'system', content: 'You are a theological writer summarizing pastoral teaching. Write comprehensive explanations without citations.' },
+        { role: 'system', content: 'You are summarizing Pastor Bob Kopeny\'s biblical teaching. Write comprehensive, flowing paragraphs without citations.' },
         { role: 'user', content: prompt }
       ],
       temperature: 0.7,
-      max_tokens: 800
+      max_tokens: 1000
     });
 
     const opts = {
@@ -93,15 +105,32 @@ async function callOpenAI(excerpts, query, key) {
       res.on('data', c => body += c);
       res.on('end', () => {
         clearTimeout(to);
-        if (res.statusCode !== 200) return reject(new Error(`Status ${res.statusCode}`));
+        console.log('OpenAI response status:', res.statusCode);
+        if (res.statusCode !== 200) {
+          console.error('OpenAI error body:', body);
+          return reject(new Error(`OpenAI returned ${res.statusCode}`));
+        }
         try {
           const r = JSON.parse(body);
-          resolve(r.choices?.[0]?.message?.content || 'Summary unavailable');
-        } catch (e) { reject(e); }
+          const content = r.choices?.[0]?.message?.content;
+          if (!content) {
+            console.error('No content in response');
+            return reject(new Error('No content'));
+          }
+          resolve(content);
+        } catch (e) {
+          console.error('Parse error:', e);
+          reject(e);
+        }
       });
     });
 
-    req.on('error', e => { clearTimeout(to); reject(e); });
+    req.on('error', e => { 
+      clearTimeout(to); 
+      console.error('Request error:', e);
+      reject(e); 
+    });
+    
     req.write(data);
     req.end();
   });
