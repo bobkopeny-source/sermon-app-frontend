@@ -86,15 +86,27 @@ function extractSegments(sermons) {
 
 async function generateWithCitations(segs, query, key) {
   const https = require('https');
-  const ctx = segs.map((s,i) => `[${i+1}] At ${s.timestamp} on ${s.date}:\n${s.text}`).join('\n\n');
-  const prompt = `Write 3-4 paragraphs about Pastor Bob's teaching on "${query}". After EVERY statement, cite the source like this: ([10:51 from October 09, 2025]). Use actual timestamps below.\n\nSources:\n${ctx}\n\nWrite with frequent citations:`;
+  const ctx = segs.map((s,i) => `SOURCE ${i+1} - Timestamp: ${s.timestamp} on ${s.date}\nContent: ${s.text}`).join('\n\n');
+  const prompt = `Write 3-4 paragraphs about Pastor Bob's teaching on "${query}".
+
+CRITICAL INSTRUCTIONS:
+- Each source below has a DIFFERENT timestamp
+- You MUST cite using the EXACT timestamp from each source
+- When referencing SOURCE 1, use SOURCE 1's timestamp
+- When referencing SOURCE 2, use SOURCE 2's timestamp
+- DO NOT reuse the same timestamp multiple times
+- Citation format: ([MM:SS from Month DD, YYYY])
+
+${ctx}
+
+Write 3-4 paragraphs with DIFFERENT timestamp citations:`;
   
   return new Promise((resolve, reject) => {
     const to = setTimeout(() => { req.destroy(); reject(new Error('timeout')); }, 18000);
     const data = JSON.stringify({
       model: 'gpt-4o-mini',
       messages: [
-        { role: 'system', content: 'Always cite with format: ([MM:SS from Month DD, YYYY])' },
+        { role: 'system', content: 'You cite sources with their exact timestamps. Never reuse the same timestamp.' },
         { role: 'user', content: prompt }
       ],
       temperature: 0.7, max_tokens: 1000
