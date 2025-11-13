@@ -68,12 +68,20 @@ function getSegments(sermons) {
 
 async function withCites(segs, query, key) {
   const https = require('https');
-  const srcs = segs.map((s,i) => `[${i+1}] At ${s.timestamp} on ${s.date}: "${s.text.substring(0,200)}..."`).join('\n\n');
-  const prompt = `Write 3-4 paragraphs about Pastor Bob's teaching on "${query}". After EACH claim, add [1] or [2] or [3] etc to cite the source. Use DIFFERENT numbers.\n\nSources:\n${srcs}\n\nWrite:`;
+  const srcs = segs.map((s,i) => `[${i+1}] At ${s.timestamp} on ${s.date}, Pastor Bob said:\n"${s.text}"`).join('\n\n---\n\n');
+  const prompt = `You are summarizing what Pastor Bob Kopeny ACTUALLY said about "${query}".
+
+Below are EXACT QUOTES from his sermons with timestamps. Write a summary based ONLY on what he actually said in these quotes. Do not add information that isn't in the quotes.
+
+${srcs}
+
+Write 3-4 paragraphs summarizing what Pastor Bob teaches in these actual quotes. After EACH statement, cite which quote it comes from using [1], [2], [3], etc. Only write about content that appears in the quotes above.
+
+Write your summary:`;
   
   return new Promise((resolve, reject) => {
     const to = setTimeout(() => { req.destroy(); reject(new Error('timeout')); }, 18000);
-    const data = JSON.stringify({ model: 'gpt-4o-mini', messages: [{ role: 'system', content: 'Cite with [1], [2], [3]. Use different numbers.' }, { role: 'user', content: prompt }], temperature: 0.7, max_tokens: 900 });
+    const data = JSON.stringify({ model: 'gpt-4o-mini', messages: [{ role: 'system', content: 'Summarize only what is in the provided quotes. Cite each claim with [1], [2], [3].' }, { role: 'user', content: prompt }], temperature: 0.5, max_tokens: 900 });
     const opts = { hostname: 'api.openai.com', path: '/v1/chat/completions', method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}`, 'Content-Length': Buffer.byteLength(data) } };
     const req = https.request(opts, res => {
       let body = '';
