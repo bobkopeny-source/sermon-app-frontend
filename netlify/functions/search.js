@@ -158,4 +158,36 @@ Write a clear, comprehensive summary of Pastor Bob's teaching on "${query}":`;
       let body = '';
       res.on('data', c => body += c);
       res.on('end', () => {
-        clearTimeout(timeou
+        clearTimeout(timeout);
+        if (res.statusCode !== 200) {
+          console.error('OpenAI error:', res.statusCode);
+          return reject(new Error(`OpenAI Status ${res.statusCode}`));
+        }
+        try {
+          const response = JSON.parse(body);
+          const content = response.choices?.[0]?.message?.content;
+          if (content) {
+            resolve(content);
+          } else {
+            reject(new Error('No content in OpenAI response'));
+          }
+        } catch (e) {
+          reject(e);
+        }
+      });
+    });
+
+    req.on('error', (e) => {
+      clearTimeout(timeout);
+      reject(e);
+    });
+    
+    req.write(data);
+    req.end();
+  });
+}
+
+function getDate(title) {
+  const m = title.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  return m ? `${m[3]}-${m[1].padStart(2,'0')}-${m[2].padStart(2,'0')}` : '';
+}
