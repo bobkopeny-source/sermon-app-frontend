@@ -44,14 +44,14 @@ exports.handler = async (event, context) => {
           const queryIndex = lowerTranscript.indexOf(queryLower);
           let excerpt;
           if (queryIndex !== -1) {
-            const start = Math.max(0, queryIndex - 800);
-            const end = Math.min(transcript.length, queryIndex + 1200);
+            const start = Math.max(0, queryIndex - 1000);
+            const end = Math.min(transcript.length, queryIndex + 1500);
             excerpt = transcript.substring(start, end);
           } else {
-            excerpt = transcript.substring(0, 2000);
+            excerpt = transcript.substring(0, 2500);
           }
-          return `From "${title}":\n${excerpt}`;
-        }).join('\n\n---\n\n');
+          return `SERMON: "${title}"\nPASTOR BOB'S WORDS:\n${excerpt}`;
+        }).join('\n\n========\n\n');
         
         console.log(`Generating summary from ${topForSummary.length} sermons`);
         analysis = await callOpenAI(relevantExcerpts, query, KEY);
@@ -79,36 +79,36 @@ exports.handler = async (event, context) => {
 async function callOpenAI(excerpts, query, key) {
   const https = require('https');
   return new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => { req.destroy(); reject(new Error('timeout')); }, 20000);
-    const prompt = `You are summarizing Pastor Bob Kopeny's biblical teaching on "${query}" from Calvary Chapel East Anaheim.
+    const timeout = setTimeout(() => { req.destroy(); reject(new Error('timeout')); }, 22000);
+    const prompt = `You are summarizing Pastor Bob Kopeny's teaching on "${query}".
 
-Below are excerpts from his actual sermons. Write a comprehensive 4-5 paragraph summary that includes:
+CRITICAL: You MUST include at least 1-2 EXACT QUOTES from the sermon excerpts below. Copy his actual words verbatim in quotation marks.
 
-1. His biblical foundations and key scriptures
-2. At least ONE direct quote or illustration from Pastor Bob (clearly indicated with quotation marks)
-3. Practical applications he emphasizes
-4. How this connects to the broader gospel message
+Below are Pastor Bob's actual spoken words from his sermons. Write a 4-5 paragraph summary that:
 
-When you include a quote or illustration, introduce it naturally like:
-- "As Pastor Bob puts it, '...'"
-- "Pastor Bob illustrates this by saying, '...'"
-- "In his words, '...'"
+1. Includes 1-2 EXACT QUOTES from Pastor Bob (his actual words from the excerpts)
+2. Explains the biblical foundation
+3. Shares any stories, illustrations, or examples he uses
+4. Shows practical applications
 
-Make the summary feel personal and pastoral, capturing Pastor Bob's teaching voice.
+FORMAT FOR QUOTES:
+Pastor Bob says, "..." [use his exact words from the excerpts]
+Or: As Pastor Bob puts it, "..." [copy directly from the text]
 
-SERMON EXCERPTS:
+Do NOT paraphrase his quotes - use his EXACT words from the excerpts below.
+
 ${excerpts}
 
-Write a clear, comprehensive summary with at least one direct quote or illustration from Pastor Bob:`;
+Now write the summary with at least 1-2 direct quotes from Pastor Bob's words above:`;
     
     const data = JSON.stringify({
       model: 'gpt-4o-mini',
       messages: [
-        { role: 'system', content: 'You are a theological writer who summarizes pastoral teaching accurately, including memorable quotes and illustrations from the pastor.' },
+        { role: 'system', content: 'You include exact quotes from source material. When told to quote, you copy the exact words verbatim in quotation marks.' },
         { role: 'user', content: prompt }
       ],
-      temperature: 0.7,
-      max_tokens: 1200
+      temperature: 0.6,
+      max_tokens: 1300
     });
     const opts = { hostname: 'api.openai.com', path: '/v1/chat/completions', method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}`, 'Content-Length': Buffer.byteLength(data) } };
     const req = https.request(opts, res => {
