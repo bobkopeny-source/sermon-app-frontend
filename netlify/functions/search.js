@@ -20,50 +20,67 @@ exports.handler = async (event, context) => {
     const sermons = loadAllSermons();
     const queryLower = query.toLowerCase();
     
-    // Find relevant sermons
-    const results = sermons.filter(s => 
-      s && (s.title?.toLowerCase().includes(queryLower) || 
-            s.transcript?.toLowerCase().replace(/\[\d+:\d+:\d+\]/g, " ").includes(queryLower))
-    ).slice(0, 10);
+    // Find sermons and count how many times query appears
+    const scoredResults = sermons
+      .filter(s => s && s.transcript)
+      .map(s => {
+        const titleLower = (s.title || '').toLowerCase();
+        const transcriptLower = s.transcript.toLowerCase().replace(/\[\d+:\d+:\d+\]/g, ' ');
+        
+        // Count occurrences
+        const titleMatches = (titleLower.match(new RegExp(queryLower, 'g')) || []).length;
+        const transcriptMatches = (transcriptLower.match(new RegExp(queryLower, 'g')) || []).length;
+        
+        // Calculate relevance score
+        const score = (titleMatches * 10) + transcriptMatches;
+        
+        return { sermon: s, score: score, transcriptMatches: transcriptMatches };
+      })
+      .filter(r => r.score > 0)
+      .sort((a, b) => b.score - a.score);
     
-    let analysis = `Found ${results.length} sermons on "${query}".`;
+    // For video display: only show sermons where topic appears at least 3 times OR is in title
+    const primarySermons = scoredResults
+      .filter(r => r.transcriptMatches >= 3 || (r.sermon.title || '').toLowerCase().includes(queryLower))
+      .slice(0, 8);
+    
+    // For AI summary: use top results regardless
+    const topForSummary = scoredResults.slice(0, 5);
+    
+    let analysis = `Found ${scoredResults.length} sermons mentioning "${query}".`;
     const KEY = process.env.opeaikey || process.env.OPENAI_API_KEY;
     
-    if (KEY && results.length > 0) {
+    if (KEY && topForSummary.length > 0) {
       try {
-        // Get substantial excerpts from sermons that actually mention the topic
-        const relevantExcerpts = results
-          .filter(s => s.transcript)
-          .map(s => {
+        const relevantExcerpts = topForSummary
+          .map(r => {
+            const s = r.sermon;
             const transcript = s.transcript.replace(/\[\d+:\d+:\d+\]/g, ' ');
             const title = s.title || 'Untitled';
             
-            // Find where the query appears and get context around it
+            // Find where the query appears and get context
             const lowerTranscript = transcript.toLowerCase();
             const queryIndex = lowerTranscript.indexOf(queryLower);
             
             let excerpt;
             if (queryIndex !== -1) {
-              // Get 1500 chars around where the query appears
               const start = Math.max(0, queryIndex - 500);
               const end = Math.min(transcript.length, queryIndex + 1000);
               excerpt = transcript.substring(start, end);
             } else {
-              // Query in title but not transcript - get beginning
               excerpt = transcript.substring(0, 1500);
             }
             
-            return `From "${title}":\n${excerpt}`;
+            return `From "${title}" (mentioned ${r.transcriptMatches} times):\n${excerpt}`;
           })
-          .slice(0, 4)
           .join('\n\n---\n\n');
         
-        console.log('Calling OpenAI with relevant excerpts');
+        console.log(`Generating summary from ${topForSummary.length} sermons`);
         analysis = await callOpenAI(relevantExcerpts, query, KEY);
         
       } catch (e) {
         console.error('OpenAI error:', e.message);
-        analysis = `Pastor Bob addresses "${query}" in ${results.length} sermons. His teaching emphasizes biblical truth and practical application for daily Christian living.`;
+        analysis = `Pastor Bob addresses "${query}" in ${scoredResults.length} sermons. His teaching emphasizes biblical truth and practical application.`;
       }
     }
     
@@ -72,18 +89,18 @@ exports.handler = async (event, context) => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         grokSynthesis: analysis,
-        sermons: results.slice(0, 10).map(s => ({
-          id: s.id,
-          title: s.title,
-          url: s.url,
-          word_count: s.word_count,
-          youtubeVideo: s.url ? {
-            youtubeUrl: s.url,
-            date: getDate(s.title),
-            scripture: s.title.split('|')[0]?.trim() || s.title.substring(0, 60)
+        sermons: primarySermons.map(r => ({
+          id: r.sermon.id,
+          title: r.sermon.title,
+          url: r.sermon.url,
+          word_count: r.sermon.word_count,
+          youtubeVideo: r.sermon.url ? {
+            youtubeUrl: r.sermon.url,
+            date: getDate(r.sermon.title),
+            scripture: r.sermon.title.split('|')[0]?.trim() || r.sermon.title.substring(0, 60)
           } : null
         })),
-        totalResults: results.length
+        totalResults: scoredResults.length
       })
     };
   } catch (error) {
@@ -103,7 +120,7 @@ async function callOpenAI(excerpts, query, key) {
     
     const prompt = `You are summarizing Pastor Bob Kopeny's biblical teaching on "${query}" from Calvary Chapel East Anaheim.
 
-Below are excerpts from his actual sermons. Write a comprehensive 4-5 paragraph summary of what he teaches about this topic based on these excerpts.
+Below are excerpts from his sermons where he specifically discusses this topic. Write a comprehensive 4-5 paragraph summary.
 
 Focus on:
 - The biblical foundations he emphasizes
@@ -141,36 +158,4 @@ Write a clear, comprehensive summary of Pastor Bob's teaching on "${query}":`;
       let body = '';
       res.on('data', c => body += c);
       res.on('end', () => {
-        clearTimeout(timeout);
-        if (res.statusCode !== 200) {
-          console.error('OpenAI error:', res.statusCode, body);
-          return reject(new Error(`OpenAI Status ${res.statusCode}`));
-        }
-        try {
-          const response = JSON.parse(body);
-          const content = response.choices?.[0]?.message?.content;
-          if (content) {
-            resolve(content);
-          } else {
-            reject(new Error('No content in OpenAI response'));
-          }
-        } catch (e) {
-          reject(e);
-        }
-      });
-    });
-
-    req.on('error', (e) => {
-      clearTimeout(timeout);
-      reject(e);
-    });
-    
-    req.write(data);
-    req.end();
-  });
-}
-
-function getDate(title) {
-  const m = title.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
-  return m ? `${m[3]}-${m[1].padStart(2,'0')}-${m[2].padStart(2,'0')}` : '';
-}
+        clearTimeout(timeou
