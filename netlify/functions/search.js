@@ -20,67 +20,44 @@ exports.handler = async (event, context) => {
     const sermons = loadAllSermons();
     const queryLower = query.toLowerCase();
     
-    // Find sermons and count how many times query appears
-    const scoredResults = sermons
-      .filter(s => s && s.transcript)
-      .map(s => {
-        const titleLower = (s.title || '').toLowerCase();
-        const transcriptLower = s.transcript.toLowerCase().replace(/\[\d+:\d+:\d+\]/g, ' ');
-        
-        // Count occurrences
-        const titleMatches = (titleLower.match(new RegExp(queryLower, 'g')) || []).length;
-        const transcriptMatches = (transcriptLower.match(new RegExp(queryLower, 'g')) || []).length;
-        
-        // Calculate relevance score
-        const score = (titleMatches * 10) + transcriptMatches;
-        
-        return { sermon: s, score: score, transcriptMatches: transcriptMatches };
-      })
-      .filter(r => r.score > 0)
-      .sort((a, b) => b.score - a.score);
+    const scoredResults = sermons.filter(s => s && s.transcript).map(s => {
+      const titleLower = (s.title || '').toLowerCase();
+      const transcriptLower = s.transcript.toLowerCase().replace(/\[\d+:\d+:\d+\]/g, ' ');
+      const titleMatches = (titleLower.match(new RegExp(queryLower, 'g')) || []).length;
+      const transcriptMatches = (transcriptLower.match(new RegExp(queryLower, 'g')) || []).length;
+      const score = (titleMatches * 10) + transcriptMatches;
+      return { sermon: s, score: score, transcriptMatches: transcriptMatches };
+    }).filter(r => r.score > 0).sort((a, b) => b.score - a.score);
     
-    // For video display: only show sermons where topic appears at least 3 times OR is in title
-    const primarySermons = scoredResults
-      .filter(r => r.transcriptMatches >= 3 || (r.sermon.title || '').toLowerCase().includes(queryLower))
-      .slice(0, 8);
-    
-    // For AI summary: use top results regardless
     const topForSummary = scoredResults.slice(0, 5);
     
-    let analysis = `Found ${scoredResults.length} sermons mentioning "${query}".`;
+    let analysis = `Found ${scoredResults.length} sermons addressing "${query}".`;
     const KEY = process.env.opeaikey || process.env.OPENAI_API_KEY;
     
     if (KEY && topForSummary.length > 0) {
       try {
-        const relevantExcerpts = topForSummary
-          .map(r => {
-            const s = r.sermon;
-            const transcript = s.transcript.replace(/\[\d+:\d+:\d+\]/g, ' ');
-            const title = s.title || 'Untitled';
-            
-            // Find where the query appears and get context
-            const lowerTranscript = transcript.toLowerCase();
-            const queryIndex = lowerTranscript.indexOf(queryLower);
-            
-            let excerpt;
-            if (queryIndex !== -1) {
-              const start = Math.max(0, queryIndex - 500);
-              const end = Math.min(transcript.length, queryIndex + 1000);
-              excerpt = transcript.substring(start, end);
-            } else {
-              excerpt = transcript.substring(0, 1500);
-            }
-            
-            return `From "${title}" (mentioned ${r.transcriptMatches} times):\n${excerpt}`;
-          })
-          .join('\n\n---\n\n');
+        const relevantExcerpts = topForSummary.map(r => {
+          const s = r.sermon;
+          const transcript = s.transcript.replace(/\[\d+:\d+:\d+\]/g, ' ');
+          const title = s.title || 'Untitled';
+          const lowerTranscript = transcript.toLowerCase();
+          const queryIndex = lowerTranscript.indexOf(queryLower);
+          let excerpt;
+          if (queryIndex !== -1) {
+            const start = Math.max(0, queryIndex - 500);
+            const end = Math.min(transcript.length, queryIndex + 1000);
+            excerpt = transcript.substring(start, end);
+          } else {
+            excerpt = transcript.substring(0, 1500);
+          }
+          return `From "${title}":\n${excerpt}`;
+        }).join('\n\n---\n\n');
         
         console.log(`Generating summary from ${topForSummary.length} sermons`);
         analysis = await callOpenAI(relevantExcerpts, query, KEY);
-        
       } catch (e) {
         console.error('OpenAI error:', e.message);
-        analysis = `Pastor Bob addresses "${query}" in ${scoredResults.length} sermons. His teaching emphasizes biblical truth and practical application.`;
+        analysis = `Pastor Bob addresses "${query}" in ${scoredResults.length} sermons. His teaching emphasizes biblical truth and practical application for daily Christian living.`;
       }
     }
     
@@ -89,17 +66,7 @@ exports.handler = async (event, context) => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         grokSynthesis: analysis,
-        sermons: primarySermons.map(r => ({
-          id: r.sermon.id,
-          title: r.sermon.title,
-          url: r.sermon.url,
-          word_count: r.sermon.word_count,
-          youtubeVideo: r.sermon.url ? {
-            youtubeUrl: r.sermon.url,
-            date: getDate(r.sermon.title),
-            scripture: r.sermon.title.split('|')[0]?.trim() || r.sermon.title.substring(0, 60)
-          } : null
-        })),
+        sermons: [],
         totalResults: scoredResults.length
       })
     };
@@ -111,22 +78,17 @@ exports.handler = async (event, context) => {
 
 async function callOpenAI(excerpts, query, key) {
   const https = require('https');
-  
   return new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => {
-      req.destroy();
-      reject(new Error('OpenAI timeout'));
-    }, 20000);
-    
+    const timeout = setTimeout(() => { req.destroy(); reject(new Error('timeout')); }, 20000);
     const prompt = `You are summarizing Pastor Bob Kopeny's biblical teaching on "${query}" from Calvary Chapel East Anaheim.
 
-Below are excerpts from his sermons where he specifically discusses this topic. Write a comprehensive 4-5 paragraph summary.
+Below are excerpts from his sermons where he discusses this topic. Write a comprehensive 4-5 paragraph summary of his teaching.
 
 Focus on:
-- The biblical foundations he emphasizes
-- Practical applications he draws
+- The biblical foundations and scriptures he emphasizes
+- Practical applications for Christian living
 - Key theological points he makes
-- How he connects this to Christian living
+- How this topic connects to the broader gospel message
 
 SERMON EXCERPTS:
 ${excerpts}
@@ -142,52 +104,21 @@ Write a clear, comprehensive summary of Pastor Bob's teaching on "${query}":`;
       temperature: 0.7,
       max_tokens: 1000
     });
-
-    const options = {
-      hostname: 'api.openai.com',
-      path: '/v1/chat/completions',
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${key}`,
-        'Content-Length': Buffer.byteLength(data)
-      }
-    };
-
-    const req = https.request(options, (res) => {
+    const opts = { hostname: 'api.openai.com', path: '/v1/chat/completions', method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}`, 'Content-Length': Buffer.byteLength(data) } };
+    const req = https.request(opts, res => {
       let body = '';
       res.on('data', c => body += c);
       res.on('end', () => {
         clearTimeout(timeout);
-        if (res.statusCode !== 200) {
-          console.error('OpenAI error:', res.statusCode);
-          return reject(new Error(`OpenAI Status ${res.statusCode}`));
-        }
+        if (res.statusCode !== 200) return reject(new Error(`Status ${res.statusCode}`));
         try {
-          const response = JSON.parse(body);
-          const content = response.choices?.[0]?.message?.content;
-          if (content) {
-            resolve(content);
-          } else {
-            reject(new Error('No content in OpenAI response'));
-          }
-        } catch (e) {
-          reject(e);
-        }
+          const content = JSON.parse(body).choices?.[0]?.message?.content;
+          if (content) resolve(content); else reject(new Error('No content'));
+        } catch (e) { reject(e); }
       });
     });
-
-    req.on('error', (e) => {
-      clearTimeout(timeout);
-      reject(e);
-    });
-    
+    req.on('error', e => { clearTimeout(timeout); reject(e); });
     req.write(data);
     req.end();
   });
-}
-
-function getDate(title) {
-  const m = title.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
-  return m ? `${m[3]}-${m[1].padStart(2,'0')}-${m[2].padStart(2,'0')}` : '';
 }
