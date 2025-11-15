@@ -44,11 +44,11 @@ exports.handler = async (event, context) => {
           const queryIndex = lowerTranscript.indexOf(queryLower);
           let excerpt;
           if (queryIndex !== -1) {
-            const start = Math.max(0, queryIndex - 500);
-            const end = Math.min(transcript.length, queryIndex + 1000);
+            const start = Math.max(0, queryIndex - 800);
+            const end = Math.min(transcript.length, queryIndex + 1200);
             excerpt = transcript.substring(start, end);
           } else {
-            excerpt = transcript.substring(0, 1500);
+            excerpt = transcript.substring(0, 2000);
           }
           return `From "${title}":\n${excerpt}`;
         }).join('\n\n---\n\n');
@@ -82,27 +82,33 @@ async function callOpenAI(excerpts, query, key) {
     const timeout = setTimeout(() => { req.destroy(); reject(new Error('timeout')); }, 20000);
     const prompt = `You are summarizing Pastor Bob Kopeny's biblical teaching on "${query}" from Calvary Chapel East Anaheim.
 
-Below are excerpts from his sermons where he discusses this topic. Write a comprehensive 4-5 paragraph summary of his teaching.
+Below are excerpts from his actual sermons. Write a comprehensive 4-5 paragraph summary that includes:
 
-Focus on:
-- The biblical foundations and scriptures he emphasizes
-- Practical applications for Christian living
-- Key theological points he makes
-- How this topic connects to the broader gospel message
+1. His biblical foundations and key scriptures
+2. At least ONE direct quote or illustration from Pastor Bob (clearly indicated with quotation marks)
+3. Practical applications he emphasizes
+4. How this connects to the broader gospel message
+
+When you include a quote or illustration, introduce it naturally like:
+- "As Pastor Bob puts it, '...'"
+- "Pastor Bob illustrates this by saying, '...'"
+- "In his words, '...'"
+
+Make the summary feel personal and pastoral, capturing Pastor Bob's teaching voice.
 
 SERMON EXCERPTS:
 ${excerpts}
 
-Write a clear, comprehensive summary of Pastor Bob's teaching on "${query}":`;
+Write a clear, comprehensive summary with at least one direct quote or illustration from Pastor Bob:`;
     
     const data = JSON.stringify({
       model: 'gpt-4o-mini',
       messages: [
-        { role: 'system', content: 'You are a theological writer summarizing pastoral teaching accurately and comprehensively.' },
+        { role: 'system', content: 'You are a theological writer who summarizes pastoral teaching accurately, including memorable quotes and illustrations from the pastor.' },
         { role: 'user', content: prompt }
       ],
       temperature: 0.7,
-      max_tokens: 1000
+      max_tokens: 1200
     });
     const opts = { hostname: 'api.openai.com', path: '/v1/chat/completions', method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}`, 'Content-Length': Buffer.byteLength(data) } };
     const req = https.request(opts, res => {
