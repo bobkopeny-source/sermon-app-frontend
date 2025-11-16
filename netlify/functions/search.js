@@ -44,11 +44,11 @@ exports.handler = async (event, context) => {
           const queryIndex = lowerTranscript.indexOf(queryLower);
           let excerpt;
           if (queryIndex !== -1) {
-            const start = Math.max(0, queryIndex - 1000);
-            const end = Math.min(transcript.length, queryIndex + 1500);
+            const start = Math.max(0, queryIndex - 1200);
+            const end = Math.min(transcript.length, queryIndex + 1800);
             excerpt = transcript.substring(start, end);
           } else {
-            excerpt = transcript.substring(0, 2500);
+            excerpt = transcript.substring(0, 3000);
           }
           return `SERMON: "${title}"\nPASTOR BOB'S WORDS:\n${excerpt}`;
         }).join('\n\n========\n\n');
@@ -79,36 +79,46 @@ exports.handler = async (event, context) => {
 async function callOpenAI(excerpts, query, key) {
   const https = require('https');
   return new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => { req.destroy(); reject(new Error('timeout')); }, 22000);
-    const prompt = `You are summarizing Pastor Bob Kopeny's teaching on "${query}".
+    const timeout = setTimeout(() => { req.destroy(); reject(new Error('timeout')); }, 25000);
+    const prompt = `You are summarizing Pastor Bob Kopeny's teaching on "${query}" from Calvary Chapel East Anaheim.
 
-CRITICAL: You MUST include at least 1-2 EXACT QUOTES from the sermon excerpts below. Copy his actual words verbatim in quotation marks.
+CRITICAL REQUIREMENTS:
+1. Include at least 1-2 EXACT QUOTES from Pastor Bob (copy his actual words verbatim in quotation marks)
+2. Include any ILLUSTRATIONS, STORIES, or EXAMPLES he uses (describe them in detail)
+3. Look for personal anecdotes, analogies, real-life examples, or teaching illustrations
 
-Below are Pastor Bob's actual spoken words from his sermons. Write a 4-5 paragraph summary that:
+Below are Pastor Bob's actual spoken words from his sermons. Write a 4-5 paragraph summary that includes:
 
-1. Includes 1-2 EXACT QUOTES from Pastor Bob (his actual words from the excerpts)
-2. Explains the biblical foundation
-3. Shares any stories, illustrations, or examples he uses
-4. Shows practical applications
+- Biblical foundations and key scriptures he references
+- 1-2 EXACT QUOTES from Pastor Bob (his precise words from the excerpts)
+- Any ILLUSTRATIONS, STORIES, or EXAMPLES he shares (describe them)
+- Practical applications he emphasizes
 
-FORMAT FOR QUOTES:
-Pastor Bob says, "..." [use his exact words from the excerpts]
-Or: As Pastor Bob puts it, "..." [copy directly from the text]
+LOOK FOR:
+- Stories about people ("I remember when...", "There was a man who...", "I once knew...")
+- Illustrations ("It's like...", "Imagine if...", "Think about...")
+- Examples from daily life, history, or current events
+- Personal experiences Pastor Bob shares
 
-Do NOT paraphrase his quotes - use his EXACT words from the excerpts below.
+FORMAT:
+"As Pastor Bob says, '...[exact quote]...'"
+"Pastor Bob illustrates this with a story about..."
+"He gives the example of..."
+
+DO NOT paraphrase quotes - use his EXACT words.
 
 ${excerpts}
 
-Now write the summary with at least 1-2 direct quotes from Pastor Bob's words above:`;
+Write the summary with quotes AND any illustrations/stories Pastor Bob uses:`;
     
     const data = JSON.stringify({
       model: 'gpt-4o-mini',
       messages: [
-        { role: 'system', content: 'You include exact quotes from source material. When told to quote, you copy the exact words verbatim in quotation marks.' },
+        { role: 'system', content: 'You include exact quotes AND detailed descriptions of any illustrations, stories, or examples from the source material. You are thorough in capturing the pastor\'s teaching style.' },
         { role: 'user', content: prompt }
       ],
       temperature: 0.6,
-      max_tokens: 1300
+      max_tokens: 1400
     });
     const opts = { hostname: 'api.openai.com', path: '/v1/chat/completions', method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}`, 'Content-Length': Buffer.byteLength(data) } };
     const req = https.request(opts, res => {
