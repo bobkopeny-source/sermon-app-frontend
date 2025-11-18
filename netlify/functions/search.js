@@ -12,19 +12,55 @@ function loadAllSermons() {
   return sermonsCache;
 }
 
+function extractBibleReference(query) {
+  // Match patterns like "Acts 6:1", "Romans 3:23", "1 John 2:15", etc.
+  const match = query.match(/(\d?\s*[A-Za-z]+)\s+(\d+)(?::(\d+))?/);
+  if (match) {
+    const book = match[1].trim();
+    const chapter = match[2];
+    const verse = match[3];
+    return { book, chapter, verse, found: true };
+  }
+  return { found: false };
+}
+
 exports.handler = async (event, context) => {
   try {
     const { query } = JSON.parse(event.body || '{}');
     if (!query) return { statusCode: 400, body: JSON.stringify({ error: 'Query required' }) };
     
     const sermons = loadAllSermons();
-    const queryLower = query.toLowerCase();
+    let queryLower = query.toLowerCase();
+    
+    // Check if this is a Bible reference query
+    const bibleRef = extractBibleReference(query);
+    if (bibleRef.found) {
+      console.log(`Detected Bible reference: ${bibleRef.book} ${bibleRef.chapter}${bibleRef.verse ? ':' + bibleRef.verse : ''}`);
+      // Search for just the book and chapter (more flexible)
+      queryLower = `${bibleRef.book} ${bibleRef.chapter}`.toLowerCase();
+    }
     
     const scoredResults = sermons.filter(s => s && s.transcript).map(s => {
       const titleLower = (s.title || '').toLowerCase();
       const transcriptLower = s.transcript.toLowerCase().replace(/\[\d+:\d+:\d+\]/g, ' ');
-      const titleMatches = (titleLower.match(new RegExp(queryLower, 'g')) || []).length;
-      const transcriptMatches = (transcriptLower.match(new RegExp(queryLower, 'g')) || []).length;
+      
+      // For Bible references, be more flexible in matching
+      let titleMatches = 0;
+      let transcriptMatches = 0;
+      
+      if (bibleRef.found) {
+        // Match variations: "Acts 6", "Acts 6:1", "Acts 6:1-7", etc.
+        const bookChapter = `${bibleRef.book} ${bibleRef.chapter}`.toLowerCase();
+        const pattern = new RegExp(bookChapter.replace(/\s+/g, '\\s*'), 'gi');
+        titleMatches = (titleLower.match(pattern) || []).length;
+        transcriptMatches = (transcriptLower.match(pattern) || []).length;
+      } else {
+        // Regular search
+        const pattern = new RegExp(queryLower, 'g');
+        titleMatches = (titleLower.match(pattern) || []).length;
+        transcriptMatches = (transcriptLower.match(pattern) || []).length;
+      }
+      
       const score = (titleMatches * 10) + transcriptMatches;
       return { sermon: s, score: score, transcriptMatches: transcriptMatches };
     }).filter(r => r.score > 0).sort((a, b) => b.score - a.score);
