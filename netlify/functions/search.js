@@ -13,7 +13,6 @@ function loadAllSermons() {
 }
 
 function extractBibleReference(query) {
-  // Match patterns like "Acts 6:1", "Romans 3:23", "1 John 2:15", etc.
   const match = query.match(/(\d?\s*[A-Za-z]+)\s+(\d+)(?::(\d+))?/);
   if (match) {
     const book = match[1].trim();
@@ -24,6 +23,17 @@ function extractBibleReference(query) {
   return { found: false };
 }
 
+function isTeachingQuestion(query) {
+  const patterns = [
+    /what does.*teach/i,
+    /what is.*about/i,
+    /explain.*verse/i,
+    /meaning of/i,
+    /interpretation of/i
+  ];
+  return patterns.some(p => p.test(query));
+}
+
 exports.handler = async (event, context) => {
   try {
     const { query } = JSON.parse(event.body || '{}');
@@ -31,12 +41,11 @@ exports.handler = async (event, context) => {
     
     const sermons = loadAllSermons();
     let queryLower = query.toLowerCase();
+    const isQuestion = isTeachingQuestion(query);
     
-    // Check if this is a Bible reference query
     const bibleRef = extractBibleReference(query);
     if (bibleRef.found) {
       console.log(`Detected Bible reference: ${bibleRef.book} ${bibleRef.chapter}${bibleRef.verse ? ':' + bibleRef.verse : ''}`);
-      // Search for just the book and chapter (more flexible)
       queryLower = `${bibleRef.book} ${bibleRef.chapter}`.toLowerCase();
     }
     
@@ -44,18 +53,15 @@ exports.handler = async (event, context) => {
       const titleLower = (s.title || '').toLowerCase();
       const transcriptLower = s.transcript.toLowerCase().replace(/\[\d+:\d+:\d+\]/g, ' ');
       
-      // For Bible references, be more flexible in matching
       let titleMatches = 0;
       let transcriptMatches = 0;
       
       if (bibleRef.found) {
-        // Match variations: "Acts 6", "Acts 6:1", "Acts 6:1-7", etc.
         const bookChapter = `${bibleRef.book} ${bibleRef.chapter}`.toLowerCase();
         const pattern = new RegExp(bookChapter.replace(/\s+/g, '\\s*'), 'gi');
         titleMatches = (titleLower.match(pattern) || []).length;
         transcriptMatches = (transcriptLower.match(pattern) || []).length;
       } else {
-        // Regular search
         const pattern = new RegExp(queryLower, 'g');
         titleMatches = (titleLower.match(pattern) || []).length;
         transcriptMatches = (transcriptLower.match(pattern) || []).length;
@@ -89,8 +95,8 @@ exports.handler = async (event, context) => {
           return `SERMON: "${title}"\nPASTOR BOB'S WORDS:\n${excerpt}`;
         }).join('\n\n========\n\n');
         
-        console.log(`Generating summary from ${topForSummary.length} sermons`);
-        analysis = await callOpenAI(relevantExcerpts, query, KEY);
+        console.log(`Generating summary from ${topForSummary.length} sermons (isQuestion: ${isQuestion})`);
+        analysis = await callOpenAI(relevantExcerpts, query, bibleRef, isQuestion, KEY);
       } catch (e) {
         console.error('OpenAI error:', e.message);
         analysis = `Pastor Bob addresses "${query}" in ${scoredResults.length} sermons. His teaching emphasizes biblical truth and practical application for daily Christian living.`;
@@ -112,16 +118,40 @@ exports.handler = async (event, context) => {
   }
 };
 
-async function callOpenAI(excerpts, query, key) {
+async function callOpenAI(excerpts, query, bibleRef, isQuestion, key) {
   const https = require('https');
   return new Promise((resolve, reject) => {
     const timeout = setTimeout(() => { req.destroy(); reject(new Error('timeout')); }, 25000);
-    const prompt = `You are summarizing Pastor Bob Kopeny's teaching on "${query}" from Calvary Chapel East Anaheim.
+    
+    let prompt;
+    
+    if (isQuestion && bibleRef.found && bibleRef.verse) {
+      // Specific verse question - focus on that verse
+      const verseRef = `${bibleRef.book} ${bibleRef.chapter}:${bibleRef.verse}`;
+      prompt = `The user asks: "${query}"
+
+Below are excerpts from Pastor Bob Kopeny's sermons where he teaches on ${verseRef}.
+
+YOUR TASK: Answer the question directly. Start by explaining what ${verseRef} teaches, then provide Pastor Bob's insights.
+
+STRUCTURE:
+1. First paragraph: Directly answer "What does ${verseRef} teach?" - explain the verse content and meaning
+2. Next paragraphs: Share Pastor Bob's teaching, including:
+   - At least 1-2 EXACT QUOTES from Pastor Bob (his actual words in quotation marks)
+   - Any illustrations, stories, or examples he uses
+   - Practical applications he emphasizes
+
+EXCERPTS FROM PASTOR BOB'S SERMONS:
+${excerpts}
+
+Write a clear answer that directly addresses the question about ${verseRef}:`;
+    } else {
+      // General topic or broader question
+      prompt = `You are summarizing Pastor Bob Kopeny's teaching on "${query}" from Calvary Chapel East Anaheim.
 
 CRITICAL REQUIREMENTS:
 1. Include at least 1-2 EXACT QUOTES from Pastor Bob (copy his actual words verbatim in quotation marks)
 2. Include any ILLUSTRATIONS, STORIES, or EXAMPLES he uses (describe them in detail)
-3. Look for personal anecdotes, analogies, real-life examples, or teaching illustrations
 
 Below are Pastor Bob's actual spoken words from his sermons. Write a 4-5 paragraph summary that includes:
 
@@ -131,26 +161,22 @@ Below are Pastor Bob's actual spoken words from his sermons. Write a 4-5 paragra
 - Practical applications he emphasizes
 
 LOOK FOR:
-- Stories about people ("I remember when...", "There was a man who...", "I once knew...")
-- Illustrations ("It's like...", "Imagine if...", "Think about...")
+- Stories about people
+- Illustrations and analogies
 - Examples from daily life, history, or current events
 - Personal experiences Pastor Bob shares
-
-FORMAT:
-"As Pastor Bob says, '...[exact quote]...'"
-"Pastor Bob illustrates this with a story about..."
-"He gives the example of..."
 
 DO NOT paraphrase quotes - use his EXACT words.
 
 ${excerpts}
 
 Write the summary with quotes AND any illustrations/stories Pastor Bob uses:`;
+    }
     
     const data = JSON.stringify({
       model: 'gpt-4o-mini',
       messages: [
-        { role: 'system', content: 'You include exact quotes AND detailed descriptions of any illustrations, stories, or examples from the source material. You are thorough in capturing the pastor\'s teaching style.' },
+        { role: 'system', content: 'You answer questions about Bible verses directly and include exact quotes from the pastor. When asked "what does X teach", you explain the verse content first, then add the pastor\'s insights.' },
         { role: 'user', content: prompt }
       ],
       temperature: 0.6,
