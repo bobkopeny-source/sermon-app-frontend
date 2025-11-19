@@ -22,6 +22,11 @@ function isTeachingQuestion(query) {
   return /what does.*teach|what is.*about|explain.*verse|meaning of|interpretation of/i.test(query);
 }
 
+function extractDate(title) {
+  const m = title.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  return m ? `${m[3]}-${m[1].padStart(2,'0')}-${m[2].padStart(2,'0')}` : '';
+}
+
 exports.handler = async (event, context) => {
   try {
     const { query } = JSON.parse(event.body || '{}');
@@ -36,7 +41,7 @@ exports.handler = async (event, context) => {
       queryLower = `${bibleRef.book} ${bibleRef.chapter}`.toLowerCase();
     }
     
-    // FIXED: Use ALL sermons with transcripts, not just ones with videos
+    // Use ALL sermons with transcripts
     const allSermons = sermons.filter(s => s && s.transcript);
     
     const scoredResults = allSermons.map(s => {
@@ -59,11 +64,12 @@ exports.handler = async (event, context) => {
       return { sermon: s, score, transcriptMatches };
     }).filter(r => r.score > 0).sort((a, b) => b.score - a.score);
     
-    let analysis = `Found ${scoredResults.length} sermons.`;
+    let analysis = `Found ${scoredResults.length} sermons addressing "${query}".`;
     const KEY = process.env.opeaikey || process.env.OPENAI_API_KEY;
     
     if (KEY && scoredResults.length > 0) {
       try {
+        // Use top 5 sermons for AI summary
         const topForSummary = scoredResults.slice(0, 5);
         const relevantExcerpts = topForSummary.map(r => {
           const s = r.sermon;
@@ -71,18 +77,19 @@ exports.handler = async (event, context) => {
           const title = s.title || 'Untitled';
           const lowerTranscript = transcript.toLowerCase();
           const queryIndex = lowerTranscript.indexOf(queryLower);
+          
           let excerpt;
           if (queryIndex !== -1) {
-            const start = Math.max(0, queryIndex - 1200);
-            const end = Math.min(transcript.length, queryIndex + 1800);
+            const start = Math.max(0, queryIndex - 1500);
+            const end = Math.min(transcript.length, queryIndex + 2500);
             excerpt = transcript.substring(start, end);
           } else {
-            excerpt = transcript.substring(0, 3000);
+            excerpt = transcript.substring(0, 4000);
           }
-          return `SERMON: "${title}"\nPASTOR BOB'S WORDS:\n${excerpt}`;
+          return `From sermon "${title}":\n${excerpt}`;
         }).join('\n\n========\n\n');
         
-        console.log(`Generating summary from ${topForSummary.length} sermons (isQuestion: ${isQuestion})`);
+        console.log(`Generating comprehensive summary from ${topForSummary.length} sermons`);
         analysis = await callOpenAI(relevantExcerpts, query, bibleRef, isQuestion, KEY);
       } catch (e) {
         console.error('OpenAI error:', e.message);
@@ -90,51 +97,31 @@ exports.handler = async (event, context) => {
       }
     }
     
+    // Return top video sermons (ones with URLs)
+    const videoSermons = scoredResults
+      .filter(r => r.sermon.url)
+      .slice(0, 8)
+      .map(r => ({
+        id: r.sermon.id,
+        title: r.sermon.title,
+        url: r.sermon.url,
+        word_count: r.sermon.word_count,
+        youtubeVideo: {
+          youtubeUrl: r.sermon.url,
+          date: extractDate(r.sermon.title),
+          scripture: r.sermon.title.split('|')[0]?.trim() || r.sermon.title.substring(0, 60)
+        }
+      }));
+    
     return {
       statusCode: 200,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ grokSynthesis: analysis, sermons: [], totalResults: scoredResults.length })
+      body: JSON.stringify({ 
+        grokSynthesis: analysis, 
+        sermons: videoSermons,
+        totalResults: scoredResults.length 
+      })
     };
   } catch (error) {
     console.error('Handler error:', error);
-    return { statusCode: 500, body: JSON.stringify({ error: error.message }) };
-  }
-};
-
-async function callOpenAI(excerpts, query, bibleRef, isQuestion, key) {
-  const https = require('https');
-  return new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => { req.destroy(); reject(new Error('timeout')); }, 25000);
-    
-    let prompt;
-    if (isQuestion && bibleRef.found && bibleRef.verse) {
-      const verseRef = `${bibleRef.book} ${bibleRef.chapter}:${bibleRef.verse}`;
-      prompt = `Answer: "${query}"\n\nFirst explain what ${verseRef} teaches, then add Pastor Bob's insights from these sources. Include 1-2 exact quotes.\n\nSOURCES:\n${excerpts}\n\nWrite:`;
-    } else {
-      prompt = `Summarize Pastor Bob's teaching on "${query}". Include 1-2 exact quotes and any illustrations or stories he uses.\n\nSOURCES:\n${excerpts}\n\nWrite:`;
-    }
-    
-    const data = JSON.stringify({
-      model: 'gpt-4o-mini',
-      messages: [{ role: 'system', content: 'Summarize pastoral teaching accurately with exact quotes.' }, { role: 'user', content: prompt }],
-      temperature: 0.6, max_tokens: 1400
-    });
-    
-    const opts = { hostname: 'api.openai.com', path: '/v1/chat/completions', method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}`, 'Content-Length': Buffer.byteLength(data) } };
-    const req = https.request(opts, res => {
-      let body = '';
-      res.on('data', c => body += c);
-      res.on('end', () => {
-        clearTimeout(timeout);
-        if (res.statusCode !== 200) return reject(new Error(`Status ${res.statusCode}`));
-        try {
-          const content = JSON.parse(body).choices?.[0]?.message?.content;
-          if (content) resolve(content); else reject(new Error('No content'));
-        } catch (e) { reject(e); }
-      });
-    });
-    req.on('error', e => { clearTimeout(timeout); reject(e); });
-    req.write(data);
-    req.end();
-  });
-}
+    return { statusCode: 500, body: JSON.stringify({
