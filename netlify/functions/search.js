@@ -373,54 +373,93 @@ def home():
             
             try {
                 const response = await fetch(`/api/search/timestamps?q=${encodeURIComponent(query)}`);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
                 const data = await response.json();
+                console.log('API Response:', data); // Debug logging
                 
                 document.getElementById('loading').style.display = 'none';
                 
-                if (data.results && data.results.length > 0) {
+                if (!data) {
+                    console.error('No data received from API');
+                    document.getElementById('results').innerHTML = '<p style="color:white;text-align:center">Error: No data received. Please try again.</p>';
+                    document.getElementById('results').style.display = 'block';
+                    return;
+                }
+                
+                if (data.results && Array.isArray(data.results) && data.results.length > 0) {
+                    console.log('Displaying', data.results.length, 'results');
                     displayResults(data.results, query);
                 } else {
+                    console.log('No results found or invalid results array');
                     document.getElementById('results').innerHTML = '<p style="color:white;text-align:center">No sermons found. Try different keywords.</p>';
                     document.getElementById('results').style.display = 'block';
                 }
             } catch (error) {
+                console.error('Search error:', error);
                 document.getElementById('loading').style.display = 'none';
-                alert('Error searching. Please try again.');
-                console.error(error);
+                document.getElementById('results').innerHTML = '<p style="color:white;text-align:center">Error: ' + error.message + '</p>';
+                document.getElementById('results').style.display = 'block';
             }
         }
         
         function displayResults(results, query) {
-            const resultCount = document.getElementById('resultCount');
-            const resultsList = document.getElementById('resultsList');
+            console.log('displayResults called with:', results);
             
-            resultCount.textContent = `Found ${results.length} sermons about "${query}"`;
-            
-            // Filter out results without segments
-            const validResults = results.filter(sermon => sermon.segments && sermon.segments.length > 0);
-            
-            if (validResults.length === 0) {
-                document.getElementById('results').innerHTML = '<p style="color:white;text-align:center">No sermons found. Try different keywords.</p>';
+            if (!results || !Array.isArray(results)) {
+                console.error('Results is not an array:', results);
+                document.getElementById('results').innerHTML = '<p style="color:white;text-align:center">Error displaying results. Please try again.</p>';
                 document.getElementById('results').style.display = 'block';
                 return;
             }
             
-            resultsList.innerHTML = validResults.map(sermon => `
-                <div class="sermon-card">
-                    ${sermon.segments.map((seg, idx) => `
-                        <div class="timestamp-segment">
-                            <a href="${sermon.url}&t=${seg.seconds}s" target="_blank" class="timestamp-link">
-                                ⏱️ Jump to ${seg.timestamp}
-                            </a>
-                            <div class="segment-text">"${seg.text}"</div>
-                        </div>
-                        ${idx < sermon.segments.length - 1 ? '<div class="segment-separator">• • •</div>' : ''}
-                    `).join('')}
-                    <a href="${sermon.url}" target="_blank" class="watch-full">▶️ Watch Full Sermon</a>
-                </div>
-            `).join('');
+            const resultCount = document.getElementById('resultCount');
+            const resultsList = document.getElementById('resultsList');
             
-            document.getElementById('results').style.display = 'block';
+            // Filter out results without segments
+            const validResults = results.filter(sermon => {
+                const hasSegments = sermon && sermon.segments && Array.isArray(sermon.segments) && sermon.segments.length > 0;
+                if (!hasSegments) {
+                    console.warn('Sermon missing valid segments:', sermon);
+                }
+                return hasSegments;
+            });
+            
+            console.log('Valid results after filtering:', validResults.length);
+            
+            if (validResults.length === 0) {
+                document.getElementById('results').innerHTML = '<p style="color:white;text-align:center">No sermons found with timestamps. Try different keywords.</p>';
+                document.getElementById('results').style.display = 'block';
+                return;
+            }
+            
+            resultCount.textContent = `Found ${validResults.length} sermons about "${query}"`;
+            
+            try {
+                resultsList.innerHTML = validResults.map(sermon => `
+                    <div class="sermon-card">
+                        ${sermon.segments.map((seg, idx) => `
+                            <div class="timestamp-segment">
+                                <a href="${sermon.url}&t=${seg.seconds}s" target="_blank" class="timestamp-link">
+                                    ⏱️ Jump to ${seg.timestamp}
+                                </a>
+                                <div class="segment-text">"${seg.text}"</div>
+                            </div>
+                            ${idx < sermon.segments.length - 1 ? '<div class="segment-separator">• • •</div>' : ''}
+                        `).join('')}
+                        <a href="${sermon.url}" target="_blank" class="watch-full">▶️ Watch Full Sermon</a>
+                    </div>
+                `).join('');
+                
+                document.getElementById('results').style.display = 'block';
+            } catch (error) {
+                console.error('Error rendering results:', error);
+                document.getElementById('results').innerHTML = '<p style="color:white;text-align:center">Error rendering results: ' + error.message + '</p>';
+                document.getElementById('results').style.display = 'block';
+            }
         }
     </script>
 </body>
