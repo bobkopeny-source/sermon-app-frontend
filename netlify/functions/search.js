@@ -1,4 +1,4 @@
-  #!/usr/bin/env python3
+#!/usr/bin/env python3
 """
 Pastor Bob Sermon Search App - WITH CLICKABLE TIMESTAMPS
 Searches 716 sermons and provides clickable YouTube timestamp links
@@ -152,7 +152,8 @@ def search_sermons_with_timestamps(query, max_results=10):
         # Find relevant timestamped segments
         segments = find_relevant_timestamp_segments(sermon, search_terms, max_segments=3)
         
-        if segments:
+        # Only include if we found valid segments
+        if segments and len(segments) > 0:
             results.append({
                 'video_id': sermon.get('video_id', ''),
                 'url': sermon.get('url', ''),
@@ -395,7 +396,16 @@ def home():
             
             resultCount.textContent = `Found ${results.length} sermons about "${query}"`;
             
-            resultsList.innerHTML = results.map(sermon => `
+            // Filter out results without segments
+            const validResults = results.filter(sermon => sermon.segments && sermon.segments.length > 0);
+            
+            if (validResults.length === 0) {
+                document.getElementById('results').innerHTML = '<p style="color:white;text-align:center">No sermons found. Try different keywords.</p>';
+                document.getElementById('results').style.display = 'block';
+                return;
+            }
+            
+            resultsList.innerHTML = validResults.map(sermon => `
                 <div class="sermon-card">
                     ${sermon.segments.map((seg, idx) => `
                         <div class="timestamp-segment">
