@@ -36,8 +36,8 @@ exports.handler = async (event, context) => {
       try {
         const excerpts = results
           .filter(s => s.transcript)
-          .slice(0, 3)
-          .map(s => s.transcript.substring(0, 800))
+          .slice(0, 4)
+          .map(s => s.transcript.substring(0, 1200))
           .join('\n\n---\n\n');
         
         console.log('Calling OpenAI...');
@@ -80,11 +80,11 @@ async function callOpenAI(excerpts, query, apiKey) {
       },
       {
         role: 'user',
-        content: `Question: ${query}\n\nRelevant sermon excerpts:\n${excerpts}\n\nProvide a detailed 3-4 paragraph answer about what Pastor Bob teaches on this topic.`
+        content: `Question: ${query}\n\nRelevant sermon excerpts:\n${excerpts}\n\nProvide 3-4 paragraphs that include: 1) Pastor Bob's actual words in quotes, 2) Any illustrations or stories, 3) His pastoral heart and practical application.`
       }
     ],
     temperature: 0.7,
-    max_tokens: 600
+    max_tokens: 700
   });
 
   return new Promise((resolve, reject) => {
