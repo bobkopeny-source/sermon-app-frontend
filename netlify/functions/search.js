@@ -1,5 +1,38 @@
+const fs = require('fs');
+const path = require('path');
+
 let sermonsCache = null;
 let searchIndex = null;
+
+// Load sermon data files
+function loadAllSermons() {
+  if (sermonsCache) return sermonsCache;
+  
+  try {
+    // Get the correct path for Netlify Functions
+    const basePath = path.join(__dirname, '..', '..');
+    
+    console.log('Loading sermon files from:', basePath);
+    
+    const part1 = JSON.parse(fs.readFileSync(path.join(basePath, 'SERMONS_PART_1.json'), 'utf8'));
+    const part2 = JSON.parse(fs.readFileSync(path.join(basePath, 'SERMONS_PART_2.json'), 'utf8'));
+    const part3 = JSON.parse(fs.readFileSync(path.join(basePath, 'SERMONS_PART_3.json'), 'utf8'));
+    const part4 = JSON.parse(fs.readFileSync(path.join(basePath, 'SERMONS_PART_4.json'), 'utf8'));
+    const part5 = JSON.parse(fs.readFileSync(path.join(basePath, 'SERMONS_PART_5.json'), 'utf8'));
+    
+    sermonsCache = [...part1, ...part2, ...part3, ...part4, ...part5];
+    console.log(`Loaded ${sermonsCache.length} sermons from 5 parts`);
+    
+    // Build search index
+    searchIndex = buildSearchIndex(sermonsCache);
+    console.log(`Built search index with ${searchIndex.size} unique terms`);
+    
+    return sermonsCache;
+  } catch (error) {
+    console.error('Error loading sermon files:', error);
+    throw new Error('Failed to load sermon data: ' + error.message);
+  }
+}
 
 // Initialize search index for faster lookups
 function buildSearchIndex(sermons) {
@@ -22,25 +55,6 @@ function buildSearchIndex(sermons) {
   });
   
   return index;
-}
-
-function loadAllSermons() {
-  if (sermonsCache) return sermonsCache;
-  
-  const part1 = require('../../SERMONS_PART_1.json');
-  const part2 = require('../../SERMONS_PART_2.json');
-  const part3 = require('../../SERMONS_PART_3.json');
-  const part4 = require('../../SERMONS_PART_4.json');
-  const part5 = require('../../SERMONS_PART_5.json');
-  
-  sermonsCache = [...part1, ...part2, ...part3, ...part4, ...part5];
-  console.log(`Loaded ${sermonsCache.length} sermons from 5 parts`);
-  
-  // Build search index
-  searchIndex = buildSearchIndex(sermonsCache);
-  console.log(`Built search index with ${searchIndex.size} unique terms`);
-  
-  return sermonsCache;
 }
 
 // Enhanced relevance scoring
@@ -98,7 +112,7 @@ function searchSermons(query, limit = 8) {
   
   // If no index hits, fall back to all sermons
   const candidates = candidateIndices.size > 0 
-    ? Array.from(candidateIndices).map(idx => sermons[idx])
+    ? Array.from(candidateIndices).map(idx => sermons[idx]).filter(s => s)
     : sermons;
   
   // Score and sort
@@ -142,7 +156,7 @@ function extractRelevantExcerpts(sermons, query, maxExcerpts = 5, excerptLength 
   const queryLower = query.toLowerCase();
   
   for (const sermon of sermons.slice(0, maxExcerpts)) {
-    if (!sermon.transcript) continue;
+    if (!sermon || !sermon.transcript) continue;
     
     const transcript = sermon.transcript;
     const transcriptLower = transcript.toLowerCase();
@@ -234,11 +248,8 @@ exports.handler = async (event, context) => {
         statusCode: 200,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          answer: `I couldn't find any sermons directly addressing "${query}". Try different keywords or check the spelling.`,
-          paragraphs: [],
-          citations: [],
-          illustration: null,
-          quotation: null
+          grokSynthesis: `I couldn't find any sermons directly addressing "${query}". Try different keywords or check the spelling.`,
+          sermons: []
         })
       };
     }
@@ -313,9 +324,6 @@ CRITICAL FORMATTING INSTRUCTIONS:
 3. After each paragraph, add citation markers like [1], [2], [3] to reference specific sermons
 4. Use a warm, pastoral tone that reflects Pastor Bob's heart
 5. Include practical application
-6. IMPORTANT: Create inline YouTube timestamp links using this format:
-   - When mentioning a quote or point, reference it with: [YouTube: Sermon_Number @ HH:MM:SS]
-   - This will be converted to clickable links automatically
 
 STRUCTURE YOUR RESPONSE AS JSON:
 {
@@ -420,13 +428,19 @@ function buildResponse(aiResponse, sermons, excerpts, query) {
     citations: citations,
     illustration: null,
     quotation: null,
-    answer: ''
+    grokSynthesis: '',
+    sermons: sermons.map(s => ({
+      id: s.id,
+      title: s.title,
+      url: s.url,
+      word_count: s.word_count
+    }))
   };
   
   // If AI response available, use it
   if (aiResponse) {
     response.paragraphs = aiResponse.paragraphs || [];
-    response.answer = response.paragraphs.join('\n\n');
+    response.grokSynthesis = response.paragraphs.join('\n\n');
     
     // Add illustration if found
     if (aiResponse.illustration && aiResponse.illustration.text) {
@@ -448,8 +462,8 @@ function buildResponse(aiResponse, sermons, excerpts, query) {
     }
   } else {
     // Fallback without AI
-    response.answer = `Pastor Bob addresses "${query}" in ${sermons.length} sermon${sermons.length > 1 ? 's' : ''}. See the videos below for his full teaching.`;
-    response.paragraphs = [response.answer];
+    response.grokSynthesis = `Pastor Bob addresses "${query}" in ${sermons.length} sermon${sermons.length > 1 ? 's' : ''}. See the videos below for his full teaching.`;
+    response.paragraphs = [response.grokSynthesis];
   }
   
   return response;
