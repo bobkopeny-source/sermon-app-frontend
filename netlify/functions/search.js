@@ -1,24 +1,19 @@
-const fs = require('fs');
-const path = require('path');
-
 let sermonsCache = null;
 let searchIndex = null;
 
-// Load sermon data files
+// Load sermon data files using require (Netlify Functions compatible)
 function loadAllSermons() {
   if (sermonsCache) return sermonsCache;
   
   try {
-    // Get the correct path for Netlify Functions
-    const basePath = path.join(__dirname, '..', '..');
+    console.log('Loading sermon files...');
     
-    console.log('Loading sermon files from:', basePath);
-    
-    const part1 = JSON.parse(fs.readFileSync(path.join(basePath, 'SERMONS_PART_1.json'), 'utf8'));
-    const part2 = JSON.parse(fs.readFileSync(path.join(basePath, 'SERMONS_PART_2.json'), 'utf8'));
-    const part3 = JSON.parse(fs.readFileSync(path.join(basePath, 'SERMONS_PART_3.json'), 'utf8'));
-    const part4 = JSON.parse(fs.readFileSync(path.join(basePath, 'SERMONS_PART_4.json'), 'utf8'));
-    const part5 = JSON.parse(fs.readFileSync(path.join(basePath, 'SERMONS_PART_5.json'), 'utf8'));
+    // Use require with relative paths from functions directory
+    const part1 = require('../../SERMONS_PART_1.json');
+    const part2 = require('../../SERMONS_PART_2.json');
+    const part3 = require('../../SERMONS_PART_3.json');
+    const part4 = require('../../SERMONS_PART_4.json');
+    const part5 = require('../../SERMONS_PART_5.json');
     
     sermonsCache = [...part1, ...part2, ...part3, ...part4, ...part5];
     console.log(`Loaded ${sermonsCache.length} sermons from 5 parts`);
