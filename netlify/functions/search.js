@@ -181,7 +181,7 @@ exports.handler = async (event, context) => {
     }
     
     // Extract excerpts for AI
-    const excerpts = extractRelevantExcerpts(topSermons, query, 5, 1500);
+    const excerpts = extractRelevantExcerpts(topSermons, query, 3, 1000);
     
     // Call OpenAI
     const OPENAI_API_KEY = process.env.opeaikey || process.env.OPENAI_API_KEY;
@@ -248,7 +248,7 @@ async function callOpenAI(excerpts, query, apiKey) {
       }
     ],
     temperature: 0.7,
-    max_tokens: 800
+    max_tokens: 600
   });
 
   return new Promise((resolve, reject) => {
