@@ -270,7 +270,7 @@
             const resultsDiv = document.getElementById('results');
             
             const synthesis = data.grokSynthesis || 'AI synthesis unavailable';
-            const videos = data.sermons.filter(s => s.youtubeVideo).slice(0, 10);
+            const videos = data.videos.slice(0, 10);
             
             // Support HTML links from backend
             const paragraphs = synthesis.split('\n\n')
