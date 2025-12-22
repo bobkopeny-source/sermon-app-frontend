@@ -250,9 +250,15 @@ function detectStoriesAndIllustrations(sermons) {
       const match = transcript.match(pattern);
       if (match) {
         const pos = match.index;
-        const start = Math.max(0, pos - 100);
-        const end = Math.min(transcript.length, pos + 900); // Increased from 600 to 900
-        const story = transcript.substring(start, end);
+        const start = Math.max(0, pos - 150);
+        const end = Math.min(transcript.length, pos + 1200); // Increased to 1200 for complete stories
+        let story = transcript.substring(start, end);
+        
+        // Remove timestamps like [3:32:55]
+        story = story.replace(/\[\d+:\d+:\d+\]/g, '');
+        
+        // Clean up extra whitespace
+        story = story.replace(/\s+/g, ' ').trim();
         
         // Verify it's not just Bible exposition
         const lowerStory = story.toLowerCase();
