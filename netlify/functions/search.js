@@ -254,8 +254,8 @@ function detectStoriesAndIllustrations(sermons) {
         const end = Math.min(transcript.length, pos + 1200); // Increased to 1200 for complete stories
         let story = transcript.substring(start, end);
         
-        // Remove timestamps like [3:32:55]
-        story = story.replace(/\[\d+:\d+:\d+\]/g, '');
+        // Remove timestamps like [3:32:55] and other bracketed content like [Music]
+        story = story.replace(/\[[^\]]+\]/g, '');
         
         // Clean up extra whitespace
         story = story.replace(/\s+/g, ' ').trim();
@@ -463,17 +463,25 @@ async function callOpenAIEnhanced(excerpts, query, illustration, quotation, apiK
 CRITICAL: Return ONLY valid JSON with this exact structure:
 {
   "paragraphs": [
-    "First paragraph with citations like [1] or [2]",
-    "Second paragraph with citations [3] or [1][2]",
-    "Third paragraph...",
-    "Fourth paragraph..."
+    "First paragraph with citation [1]",
+    "Second paragraph with citation [2]",
+    "Third paragraph with citation [3]",
+    "Fourth paragraph with citation [4]"
   ]
 }
 
-RULES:
-- Write 3-4 comprehensive paragraphs (4-6 sentences each)
+CITATION RULES:
+- You MUST use all 4 citations: [1], [2], [3], [4]
+- Each paragraph should cite a DIFFERENT sermon (spread them out)
+- Paragraph 1 must include [1]
+- Paragraph 2 must include [2]  
+- Paragraph 3 must include [3]
+- Paragraph 4 must include [4]
+- You may use multiple citations per paragraph if relevant
+
+CONTENT RULES:
+- Write 4 comprehensive paragraphs (4-6 sentences each)
 - Include direct quotes from Pastor Bob
-- Add citation markers [1], [2], [3], [4] throughout to reference specific sermons
 - Use warm, pastoral tone
 - Include practical application
 - Focus on what Pastor Bob actually teaches`
