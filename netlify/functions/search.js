@@ -109,6 +109,23 @@ function searchSermons(query, limit = 4) {
       const title = (s.title || '').toLowerCase();
       if (title.includes('worship') || title.includes('music')) return false;
       
+      
+      // Check transcript for worship indicators
+      const transcript = s.transcript.toLowerCase();
+      const worshipPhrases = [
+        'sing along', 'worship team', 'praise team', 'opening song',
+        'closing song', 'let\'s stand and sing', 'as we worship',
+        'worship leader', 'keys of', 'verse 1', 'verse 2', 'chorus',
+        'bridge:', 'let\'s worship together'
+      ];
+      
+      // If transcript has multiple worship indicators, it's likely a worship set
+      let worshipCount = 0;
+      for (const phrase of worshipPhrases) {
+        if (transcript.includes(phrase)) worshipCount++;
+      }
+      
+      if (worshipCount >= 3) return false; // Multiple worship indicators = worship content
       // Filter out very short sermons (likely not full sermons)
       if (s.word_count && s.word_count < 1000) return false;
       
