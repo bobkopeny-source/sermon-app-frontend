@@ -84,7 +84,7 @@ function scoreSermon(sermon, queryWords, fullQuery) {
   return score;
 }
 
-// Fast search - limit to 4 best sermons
+// Fast search - limit to 4 best sermons with valid URLs
 function searchSermons(query, limit = 4) {
   const sermons = loadAllSermons();
   const queryLower = query.toLowerCase();
@@ -102,7 +102,7 @@ function searchSermons(query, limit = 4) {
     : sermons;
   
   const scored = candidates
-    .filter(s => s && s.transcript)
+    .filter(s => s && s.transcript && s.url) // Must have valid URL
     .map(sermon => ({
       sermon,
       score: scoreSermon(sermon, queryWords, queryLower)
@@ -156,37 +156,94 @@ function extractRelevantExcerpts(sermons, query, maxExcerpts = 4, excerptLength 
   return excerpts;
 }
 
-// Detect stories and illustrations
+// Extract timestamps from transcript
+function extractTimestamps(transcript) {
+  const timestamps = [];
+  const regex = /\[(\d+):(\d+):(\d+)\]/g;
+  let match;
+  
+  while ((match = regex.exec(transcript)) !== null) {
+    const hours = parseInt(match[1]);
+    const minutes = parseInt(match[2]);
+    const seconds = parseInt(match[3]);
+    const totalSeconds = hours * 3600 + minutes * 60 + seconds;
+    timestamps.push({
+      timestamp: match[0],
+      seconds: totalSeconds,
+      position: match.index
+    });
+  }
+  
+  return timestamps;
+}
+
+// Find best timestamp near query match
+function findBestTimestamp(sermon, query) {
+  if (!sermon || !sermon.transcript) return null;
+  
+  const transcript = sermon.transcript;
+  const queryPos = transcript.toLowerCase().indexOf(query.toLowerCase());
+  
+  if (queryPos === -1) return null;
+  
+  const timestamps = extractTimestamps(transcript);
+  if (timestamps.length === 0) return null;
+  
+  // Find closest timestamp before the query position
+  let bestTimestamp = timestamps[0];
+  for (const ts of timestamps) {
+    if (ts.position <= queryPos) {
+      bestTimestamp = ts;
+    } else {
+      break;
+    }
+  }
+  
+  return bestTimestamp.seconds;
+}
+
+// Detect stories and illustrations - focus on personal stories
 function detectStoriesAndIllustrations(sermons) {
-  const indicators = [
-    /i remember when/i,
-    /there was a (time|story|man|woman|guy)/i,
-    /let me (tell you|share)/i,
-    /i heard (about|of|a story)/i,
-    /picture this/i,
-    /imagine (if|that)/i,
-    /for example/i,
-    /to illustrate/i,
-    /here's a story/i,
-    /once upon/i,
-    /there's a.*story/i
+  // Patterns for PERSONAL stories and illustrations
+  const personalStoryIndicators = [
+    /i remember (when|a time|one time|the time)/i,
+    /let me tell you (about|a story)/i,
+    /i'll never forget/i,
+    /i once (met|knew|saw|heard about)/i,
+    /there was (this|a) (man|woman|guy|person|couple|family) (who|that)/i,
+    /years ago.*?(met|knew|happened)/i,
+    /when i was (a|in|at)/i,
+    /my (dad|mom|father|mother|friend|pastor) (used to|once|always)/i,
+    /growing up.*?(learned|saw|heard)/i,
+    /i heard.*?story (about|of)/i
   ];
   
   for (const sermon of sermons) {
     if (!sermon || !sermon.transcript) continue;
     
-    for (const pattern of indicators) {
-      const match = sermon.transcript.match(pattern);
+    const transcript = sermon.transcript;
+    
+    // Look for personal story patterns
+    for (const pattern of personalStoryIndicators) {
+      const match = transcript.match(pattern);
       if (match) {
         const pos = match.index;
         const start = Math.max(0, pos - 50);
-        const end = Math.min(sermon.transcript.length, pos + 600);
-        const story = sermon.transcript.substring(start, end);
+        const end = Math.min(transcript.length, pos + 600);
+        const story = transcript.substring(start, end);
         
-        return {
-          text: story,
-          sermon: sermon
-        };
+        // Verify it's not just Bible exposition
+        const lowerStory = story.toLowerCase();
+        const biblicalWords = ['jesus', 'moses', 'paul', 'peter', 'abraham', 'david', 'scripture', 'bible', 'verse'];
+        const biblicalCount = biblicalWords.filter(word => lowerStory.includes(word)).length;
+        
+        // If less than 2 biblical words, it's likely a personal story
+        if (biblicalCount < 2) {
+          return {
+            text: story,
+            sermon: sermon
+          };
+        }
       }
     }
   }
@@ -280,14 +337,24 @@ exports.handler = async (event, context) => {
       }
     }
     
-    // Build citations
-    const citations = topSermons.map((sermon, idx) => ({
-      id: sermon.id,
-      title: sermon.title || 'Untitled Sermon',
-      url: sermon.url,
-      date: sermon.date ? new Date(sermon.date).toLocaleDateString() : null,
-      scripture: sermon.scripture || null
-    }));
+    // Build citations with timestamps
+    const citations = topSermons.map((sermon, idx) => {
+      const timestampSeconds = findBestTimestamp(sermon, query);
+      let url = sermon.url;
+      
+      // Add timestamp to YouTube URLs
+      if (timestampSeconds && url && url.includes('youtube.com')) {
+        url = `${url}${url.includes('?') ? '&' : '?'}t=${timestampSeconds}s`;
+      }
+      
+      return {
+        id: sermon.id,
+        title: sermon.title || 'Untitled Sermon',
+        url: url,
+        date: sermon.date ? new Date(sermon.date).toLocaleDateString() : null,
+        scripture: sermon.scripture || null
+      };
+    });
     
     // Build response
     let response = {
