@@ -84,7 +84,7 @@ function scoreSermon(sermon, queryWords, fullQuery) {
   return score;
 }
 
-// Fast search - limit to 4 best sermons with valid URLs
+// Fast search - limit to 4 best UNIQUE sermons with valid URLs
 function searchSermons(query, limit = 4) {
   const sermons = loadAllSermons();
   const queryLower = query.toLowerCase();
@@ -102,16 +102,38 @@ function searchSermons(query, limit = 4) {
     : sermons;
   
   const scored = candidates
-    .filter(s => s && s.transcript && s.url) // Must have valid URL
+    .filter(s => {
+      if (!s || !s.transcript || !s.url) return false;
+      
+      // Filter out worship sets and non-sermon content
+      const title = (s.title || '').toLowerCase();
+      if (title.includes('worship') || title.includes('music')) return false;
+      
+      // Filter out very short sermons (likely not full sermons)
+      if (s.word_count && s.word_count < 1000) return false;
+      
+      return true;
+    })
     .map(sermon => ({
       sermon,
       score: scoreSermon(sermon, queryWords, queryLower)
     }))
     .filter(item => item.score > 0)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, limit);
+    .sort((a, b) => b.score - a.score);
   
-  return scored.map(item => item.sermon);
+  // Deduplicate by URL
+  const seenUrls = new Set();
+  const uniqueSermons = [];
+  
+  for (const item of scored) {
+    if (!seenUrls.has(item.sermon.url)) {
+      seenUrls.add(item.sermon.url);
+      uniqueSermons.push(item.sermon);
+      if (uniqueSermons.length >= limit) break;
+    }
+  }
+  
+  return uniqueSermons;
 }
 
 // Extract relevant excerpts
@@ -228,8 +250,8 @@ function detectStoriesAndIllustrations(sermons) {
       const match = transcript.match(pattern);
       if (match) {
         const pos = match.index;
-        const start = Math.max(0, pos - 50);
-        const end = Math.min(transcript.length, pos + 600);
+        const start = Math.max(0, pos - 100);
+        const end = Math.min(transcript.length, pos + 900); // Increased from 600 to 900
         const story = transcript.substring(start, end);
         
         // Verify it's not just Bible exposition
