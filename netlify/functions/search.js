@@ -84,8 +84,8 @@ function scoreSermon(sermon, queryWords, fullQuery) {
   return score;
 }
 
-// Fast search using index and scoring
-function searchSermons(query, limit = 10) {
+// Fast search - limit to 4 best sermons
+function searchSermons(query, limit = 4) {
   const sermons = loadAllSermons();
   const queryLower = query.toLowerCase();
   const queryWords = queryLower.match(/\b\w+\b/g) || [];
@@ -115,7 +115,7 @@ function searchSermons(query, limit = 10) {
 }
 
 // Extract relevant excerpts
-function extractRelevantExcerpts(sermons, query, maxExcerpts = 5, excerptLength = 1500) {
+function extractRelevantExcerpts(sermons, query, maxExcerpts = 4, excerptLength = 1200) {
   const excerpts = [];
   const queryLower = query.toLowerCase();
   
@@ -156,6 +156,82 @@ function extractRelevantExcerpts(sermons, query, maxExcerpts = 5, excerptLength 
   return excerpts;
 }
 
+// Detect stories and illustrations
+function detectStoriesAndIllustrations(sermons) {
+  const indicators = [
+    /i remember when/i,
+    /there was a (time|story|man|woman|guy)/i,
+    /let me (tell you|share)/i,
+    /i heard (about|of|a story)/i,
+    /picture this/i,
+    /imagine (if|that)/i,
+    /for example/i,
+    /to illustrate/i,
+    /here's a story/i,
+    /once upon/i,
+    /there's a.*story/i
+  ];
+  
+  for (const sermon of sermons) {
+    if (!sermon || !sermon.transcript) continue;
+    
+    for (const pattern of indicators) {
+      const match = sermon.transcript.match(pattern);
+      if (match) {
+        const pos = match.index;
+        const start = Math.max(0, pos - 50);
+        const end = Math.min(sermon.transcript.length, pos + 600);
+        const story = sermon.transcript.substring(start, end);
+        
+        return {
+          text: story,
+          sermon: sermon
+        };
+      }
+    }
+  }
+  
+  return null;
+}
+
+// Detect famous quotes
+function detectFamousQuotes(sermons) {
+  // Common patterns for famous people mentioned
+  const famousPeople = [
+    'Spurgeon', 'Luther', 'Augustine', 'Calvin', 'Wesley', 'Edwards',
+    'C.S. Lewis', 'Lewis', 'Tozer', 'Bonhoeffer', 'Piper', 'Pascal',
+    'Churchill', 'Lincoln', 'Washington', 'Franklin', 'Jefferson',
+    'Chesterton', 'Dostoevsky', 'Tolkien', 'Wilberforce'
+  ];
+  
+  for (const sermon of sermons) {
+    if (!sermon || !sermon.transcript) continue;
+    
+    const transcript = sermon.transcript;
+    
+    for (const person of famousPeople) {
+      const regex = new RegExp(`${person}[^.]*(?:said|wrote|stated|once said)[^.]*[.!?]`, 'i');
+      const match = transcript.match(regex);
+      
+      if (match) {
+        // Try to extract the actual quote
+        const quoteMatch = transcript.substring(match.index, match.index + 500)
+          .match(/"([^"]+)"/);
+        
+        if (quoteMatch) {
+          return {
+            text: quoteMatch[1],
+            author: person,
+            sermon: sermon
+          };
+        }
+      }
+    }
+  }
+  
+  return null;
+}
+
 exports.handler = async (event, context) => {
   try {
     const { query, filterType } = JSON.parse(event.body || '{}');
@@ -165,8 +241,8 @@ exports.handler = async (event, context) => {
     
     console.log(`Searching for: "${query}"`);
     
-    // Fast, relevant search
-    const topSermons = searchSermons(query, 10);
+    // Fast search - 4 best sermons only
+    const topSermons = searchSermons(query, 4);
     console.log(`Found ${topSermons.length} relevant sermons`);
     
     if (topSermons.length === 0) {
@@ -174,49 +250,88 @@ exports.handler = async (event, context) => {
         statusCode: 200,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          synthesis: `I couldn't find any sermons directly addressing "${query}". Try different keywords.`,
+          paragraphs: [`I couldn't find any sermons directly addressing "${query}". Try different keywords.`],
+          citations: [],
+          illustration: null,
+          quotation: null,
           videos: []
         })
       };
     }
     
     // Extract excerpts for AI
-    const excerpts = extractRelevantExcerpts(topSermons, query, 3, 1000);
+    const excerpts = extractRelevantExcerpts(topSermons, query, 4, 1200);
     
-    // Call OpenAI
+    // Look for stories and quotes
+    const illustration = detectStoriesAndIllustrations(topSermons);
+    const quotation = detectFamousQuotes(topSermons);
+    
+    // Call OpenAI for structured response
     const OPENAI_API_KEY = process.env.opeaikey || process.env.OPENAI_API_KEY;
     
-    let synthesis = null;
+    let aiResponse = null;
     if (OPENAI_API_KEY) {
       try {
         console.log('Calling OpenAI...');
-        synthesis = await callOpenAI(excerpts, query, OPENAI_API_KEY);
+        aiResponse = await callOpenAIEnhanced(excerpts, query, illustration, quotation, OPENAI_API_KEY);
         console.log('OpenAI response received');
       } catch (error) {
         console.error('OpenAI error:', error.message);
-        synthesis = `Pastor Bob addresses "${query}" in these sermons. Watch the videos below for his teaching.`;
       }
-    } else {
-      synthesis = `Pastor Bob addresses "${query}" in these sermons. Watch the videos below for his teaching.`;
     }
     
-    // Format response to match frontend expectations
-    const videos = topSermons.map(sermon => ({
+    // Build citations
+    const citations = topSermons.map((sermon, idx) => ({
+      id: sermon.id,
       title: sermon.title || 'Untitled Sermon',
-      youtubeVideo: {
-        youtubeUrl: sermon.url,
-        scripture: sermon.scripture || '',
-        date: sermon.date ? new Date(sermon.date).toLocaleDateString() : ''
-      }
+      url: sermon.url,
+      date: sermon.date ? new Date(sermon.date).toLocaleDateString() : null,
+      scripture: sermon.scripture || null
     }));
+    
+    // Build response
+    let response = {
+      paragraphs: [],
+      citations: citations,
+      illustration: null,
+      quotation: null,
+      videos: topSermons.map(sermon => ({
+        title: sermon.title || 'Untitled Sermon',
+        youtubeVideo: {
+          youtubeUrl: sermon.url,
+          scripture: sermon.scripture || '',
+          date: sermon.date ? new Date(sermon.date).toLocaleDateString() : ''
+        }
+      }))
+    };
+    
+    if (aiResponse && aiResponse.paragraphs) {
+      response.paragraphs = aiResponse.paragraphs;
+    } else {
+      response.paragraphs = [`Pastor Bob addresses "${query}" in these sermons. See the videos below for his teaching.`];
+    }
+    
+    // Add illustration if found
+    if (illustration) {
+      response.illustration = {
+        text: illustration.text,
+        source: illustration.sermon.title
+      };
+    }
+    
+    // Add quotation if found
+    if (quotation) {
+      response.quotation = {
+        text: quotation.text,
+        author: quotation.author,
+        source: quotation.sermon.title
+      };
+    }
     
     return {
       statusCode: 200,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        synthesis: synthesis,
-        videos: videos
-      })
+      body: JSON.stringify(response)
     };
     
   } catch (error) {
@@ -228,27 +343,54 @@ exports.handler = async (event, context) => {
   }
 };
 
-async function callOpenAI(excerpts, query, apiKey) {
+async function callOpenAIEnhanced(excerpts, query, illustration, quotation, apiKey) {
   const https = require('https');
   
   const contextParts = excerpts.map((ex, idx) => {
     return `[Sermon ${idx + 1}: "${ex.sermon.title}"]\n${ex.text}`;
   }).join('\n\n---\n\n');
   
+  const illustrationPrompt = illustration 
+    ? `\n\nA sermon illustration was found:\n${illustration.text}`
+    : '';
+  
+  const quotationPrompt = quotation
+    ? `\n\nA quote from ${quotation.author}: "${quotation.text}"`
+    : '';
+  
   const requestBody = JSON.stringify({
     model: 'gpt-4o-mini',
     messages: [
       {
         role: 'system',
-        content: `You are synthesizing Pastor Bob's teaching from sermon transcripts. Write a clear, comprehensive answer in 3-4 well-organized paragraphs. Include direct quotes from Pastor Bob when relevant. Use a warm, pastoral tone. Focus on practical application.`
+        content: `You are synthesizing Pastor Bob's teaching from sermon transcripts.
+
+CRITICAL: Return ONLY valid JSON with this exact structure:
+{
+  "paragraphs": [
+    "First paragraph with citations like [1] or [2]",
+    "Second paragraph with citations [3] or [1][2]",
+    "Third paragraph...",
+    "Fourth paragraph..."
+  ]
+}
+
+RULES:
+- Write 3-4 comprehensive paragraphs (4-6 sentences each)
+- Include direct quotes from Pastor Bob
+- Add citation markers [1], [2], [3], [4] throughout to reference specific sermons
+- Use warm, pastoral tone
+- Include practical application
+- Focus on what Pastor Bob actually teaches`
       },
       {
         role: 'user',
-        content: `Question: ${query}\n\nRelevant sermon excerpts:\n${contextParts}\n\nProvide a comprehensive answer about what Pastor Bob teaches on this topic.`
+        content: `Question: ${query}\n\nSermon excerpts:\n${contextParts}${illustrationPrompt}${quotationPrompt}\n\nProvide comprehensive answer with inline citations.`
       }
     ],
     temperature: 0.7,
-    max_tokens: 600
+    max_tokens: 700,
+    response_format: { type: "json_object" }
   });
 
   return new Promise((resolve, reject) => {
@@ -270,8 +412,11 @@ async function callOpenAI(excerpts, query, apiKey) {
       res.on('end', () => {
         try {
           const response = JSON.parse(data);
-          resolve(response.choices[0].message.content);
+          const content = response.choices[0].message.content;
+          const parsed = JSON.parse(content);
+          resolve(parsed);
         } catch (e) {
+          console.error('Failed to parse OpenAI response:', e);
           reject(new Error('Failed to parse OpenAI response'));
         }
       });

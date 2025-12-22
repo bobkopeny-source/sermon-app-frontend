@@ -189,6 +189,18 @@
             border-radius: 12px;
             color: #c53030;
         }
+        .inline-citation {
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 600;
+            padding: 2px 4px;
+            border-radius: 3px;
+            transition: all 0.2s;
+        }
+        .inline-citation:hover {
+            background: #667eea;
+            color: white;
+        }
     </style>
 </head>
 <body>
@@ -269,15 +281,6 @@
         function displayResults(data, query) {
             const resultsDiv = document.getElementById('results');
             
-            const synthesis = data.synthesis || 'AI synthesis unavailable';
-            const videos = data.videos.slice(0, 10);
-            
-            // Support HTML links from backend
-            const paragraphs = synthesis.split('\n\n')
-                .filter(p => p.trim())
-                .map(p => `<p>${p}</p>`)
-                .join('');
-            
             let html = `
                 <div class="response-container">
                     <div class="response-header">
@@ -286,25 +289,63 @@
                     </div>
                     
                     <div class="synthesis-text">
-                        ${paragraphs}
-                    </div>
             `;
             
-            if (videos.length > 0) {
+            if (data.paragraphs && data.paragraphs.length > 0) {
+                data.paragraphs.forEach(para => {
+                    let paraHtml = para.replace(/\[(\d+)\]/g, (match, num) => {
+                        const index = parseInt(num) - 1;
+                        if (data.citations && data.citations[index]) {
+                            const citation = data.citations[index];
+                            const url = citation.url || '#';
+                            return `<a href="${url}" class="inline-citation" target="_blank" rel="noopener" title="${citation.title}">[${num}]</a>`;
+                        }
+                        return match;
+                    });
+                    html += `<p>${paraHtml}</p>`;
+                });
+            } else {
+                html += `<p>No results found.</p>`;
+            }
+            
+            html += `</div>`;
+            
+            if (data.illustration && data.illustration.text) {
+                html += `
+                    <div class="illustration-box" style="background: linear-gradient(135deg, #FFF9E6 0%, #FFEAA7 100%); padding: 20px; border-radius: 12px; margin: 20px 0; border-left: 4px solid #FDCB6E;">
+                        <h3 style="margin: 0 0 10px 0; color: #2d3436;">📖 Sermon Illustration</h3>
+                        <div style="color: #2d3436; line-height: 1.6;">${data.illustration.text}</div>
+                        ${data.illustration.source ? `<div style="margin-top: 10px; font-size: 0.9em; color: #636e72;">From: ${data.illustration.source}</div>` : ''}
+                    </div>
+                `;
+            }
+            
+            if (data.quotation && data.quotation.text) {
+                html += `
+                    <div class="quotation-box" style="background: linear-gradient(135deg, #E8F5E9 0%, #A5D6A7 100%); padding: 20px; border-radius: 12px; margin: 20px 0; border-left: 4px solid #66BB6A;">
+                        <h3 style="margin: 0 0 10px 0; color: #1B5E20;">💬 Famous Quote</h3>
+                        <div style="color: #2d3436; font-style: italic; line-height: 1.6; font-size: 1.1em;">"${data.quotation.text}"</div>
+                        ${data.quotation.author ? `<div style="margin-top: 10px; font-weight: 600; color: #1B5E20;">— ${data.quotation.author}</div>` : ''}
+                        ${data.quotation.source ? `<div style="margin-top: 5px; font-size: 0.9em; color: #388E3C;">From: ${data.quotation.source}</div>` : ''}
+                    </div>
+                `;
+            }
+            
+            if (data.videos && data.videos.length > 0) {
                 html += `
                     <div class="video-section">
                         <h3>📺 Related Video Sermons</h3>
                         <div class="video-list">
                 `;
                 
-                videos.forEach(sermon => {
+                data.videos.forEach(sermon => {
                     const v = sermon.youtubeVideo;
                     html += `
                         <a href="${v.youtubeUrl}" target="_blank" class="video-item">
                             <div class="video-icon">▶️</div>
                             <div class="video-content">
-                                <div class="video-title">${v.scripture || sermon.title.substring(0, 60)}</div>
-                                <div class="video-date">${v.date}</div>
+                                <div class="video-title">${sermon.title || v.scripture || 'Untitled'}</div>
+                                ${v.date ? `<div class="video-date">${v.date}</div>` : ''}
                             </div>
                         </a>
                     `;
