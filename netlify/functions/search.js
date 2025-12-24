@@ -105,10 +105,12 @@ function searchSermons(query, limit = 4) {
     .filter(s => {
       if (!s || !s.transcript || !s.url) return false;
       
-      // Filter out worship sets and non-sermon content
+      // Filter out worship sets and non-sermon content by title
       const title = (s.title || '').toLowerCase();
       if (title.includes('worship') || title.includes('music')) return false;
       
+      // Filter out very short sermons (likely not full sermons)
+      if (s.word_count && s.word_count < 1000) return false;
       
       // Check transcript for worship indicators
       const transcript = s.transcript.toLowerCase();
@@ -116,7 +118,10 @@ function searchSermons(query, limit = 4) {
         'sing along', 'worship team', 'praise team', 'opening song',
         'closing song', 'let\'s stand and sing', 'as we worship',
         'worship leader', 'keys of', 'verse 1', 'verse 2', 'chorus',
-        'bridge:', 'let\'s worship together'
+        'bridge:', 'let\'s worship together', 'hallelujah', 'alleluia',
+        'sing it again', 'one more time', 'from the top',
+        'lift your hands', 'lift up your voice', '[music]', '[applause]',
+        'oh oh oh', 'la la la', 'yeah yeah yeah'
       ];
       
       // If transcript has multiple worship indicators, it's likely a worship set
@@ -125,9 +130,13 @@ function searchSermons(query, limit = 4) {
         if (transcript.includes(phrase)) worshipCount++;
       }
       
-      if (worshipCount >= 3) return false; // Multiple worship indicators = worship content
-      // Filter out very short sermons (likely not full sermons)
-      if (s.word_count && s.word_count < 1000) return false;
+      // More aggressive: 2+ worship indicators = worship content (was 3+)
+      if (worshipCount >= 2) return false;
+      
+      // For Sunday Morning Live, require higher word count to ensure it's sermon-heavy
+      if (title.includes('sunday morning live') && s.word_count && s.word_count < 2500) {
+        return false; // Too short = probably worship portion
+      }
       
       return true;
     })
@@ -267,15 +276,34 @@ function detectStoriesAndIllustrations(sermons) {
       const match = transcript.match(pattern);
       if (match) {
         const pos = match.index;
-        const start = Math.max(0, pos - 150);
-        const end = Math.min(transcript.length, pos + 1200); // Increased to 1200 for complete stories
+        const start = Math.max(0, pos - 200);
+        const end = Math.min(transcript.length, pos + 1400);
         let story = transcript.substring(start, end);
         
-        // Remove timestamps like [3:32:55] and other bracketed content like [Music]
+        // Remove all bracketed content like [3:32:55] and [Music]
         story = story.replace(/\[[^\]]+\]/g, '');
+        
+        // Remove common song fragments
+        story = story.replace(/\b(hallelujah|alleluia|oh oh oh|la la la)\b/gi, '');
         
         // Clean up extra whitespace
         story = story.replace(/\s+/g, ' ').trim();
+        
+        // Find first complete sentence (after a period + space or capital letter start)
+        const sentences = story.match(/[A-Z][^.!?]*[.!?]/g);
+        if (sentences && sentences.length > 2) {
+          // Skip first sentence if it's incomplete, take from second sentence
+          const firstProperSentence = story.indexOf(sentences[1]);
+          if (firstProperSentence > 0 && firstProperSentence < 200) {
+            story = story.substring(firstProperSentence);
+          }
+        }
+        
+        // End at a complete sentence
+        const lastPeriod = story.lastIndexOf('. ');
+        if (lastPeriod > 400) { // Keep if we have enough content before it
+          story = story.substring(0, lastPeriod + 1);
+        }
         
         // Verify it's not just Bible exposition
         const lowerStory = story.toLowerCase();
