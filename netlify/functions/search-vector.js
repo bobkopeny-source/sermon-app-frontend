@@ -13,11 +13,26 @@ exports.handler = async (event) => {
     
     // 1. Create embedding for query
     const embedding = await createEmbedding(query);
+    console.log('Created embedding');
     
     // 2. Search Qdrant
     const sermons = await searchQdrant(embedding);
     
     console.log(`Found ${sermons.length} sermons`);
+    
+    if (sermons.length === 0) {
+      return {
+        statusCode: 200,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          paragraphs: [`I couldn't find sermons about "${query}".`],
+          citations: [],
+          illustration: null,
+          quotation: null,
+          videos: []
+        })
+      };
+    }
     
     // 3. Synthesize answer
     const paragraphs = await synthesizeAnswer(sermons, query);
@@ -101,11 +116,12 @@ async function searchQdrant(embedding) {
     const body = JSON.stringify({
       vector: embedding,
       limit: 4,
-      score_threshold: 0.7
+      score_threshold: 0.5  // LOWERED from 0.7
     });
     
     const options = {
       hostname: url.hostname,
+      port: url.port || 443,
       path: '/collections/pastor_bob_sermons/points/search',
       method: 'POST',
       headers: {
@@ -119,20 +135,34 @@ async function searchQdrant(embedding) {
       let data = '';
       res.on('data', chunk => data += chunk);
       res.on('end', () => {
-        const response = JSON.parse(data);
-        const sermons = response.result.map(r => r.payload);
-        resolve(sermons);
+        try {
+          const response = JSON.parse(data);
+          console.log('Qdrant response:', JSON.stringify(response).substring(0, 500));
+          
+          if (response.result && Array.isArray(response.result)) {
+            const sermons = response.result.map(r => r.payload);
+            resolve(sermons);
+          } else {
+            console.error('Unexpected Qdrant response:', response);
+            resolve([]);
+          }
+        } catch (err) {
+          console.error('Error parsing Qdrant response:', err, data);
+          resolve([]);
+        }
       });
     });
     
-    req.on('error', reject);
+    req.on('error', (err) => {
+      console.error('Qdrant request error:', err);
+      reject(err);
+    });
     req.write(body);
     req.end();
   });
 }
 
 async function synthesizeAnswer(sermons, query) {
-  // Create context from sermons
   const context = sermons.map((s, i) => {
     const excerpt = s.transcript.substring(0, 1000);
     return `[Sermon ${i+1}: "${s.title}"]\n${excerpt}`;
@@ -146,7 +176,7 @@ async function synthesizeAnswer(sermons, query) {
           role: 'system',
           content: `Synthesize Pastor Bob's teaching. Return ONLY JSON:
 {"paragraphs": ["Para 1 with [1]", "Para 2 with [2]", "Para 3 with [3]", "Para 4 with [4]"]}
-Each paragraph must cite a different sermon. Use warm, pastoral tone.`
+Each paragraph must cite a different sermon. Include direct quotes. Use warm, pastoral tone.`
         },
         {
           role: 'user',
