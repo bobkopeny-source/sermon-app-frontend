@@ -4,3 +4,11 @@
 
 [functions]
   node_bundler = "esbuild"
+
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/:splat"
+  status = 200
+
+[functions."search_vector"]
+  included_files = ["netlify/functions/search_vector/**"]
