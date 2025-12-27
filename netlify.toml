@@ -7,7 +7,7 @@
 
 [[redirects]]
   from = "/api/search"
-  to = "/.netlify/functions/search_vector"
+  to = "/.netlify/functions/search-vector"
   status = 200
 
 [[redirects]]
