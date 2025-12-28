@@ -116,6 +116,7 @@ async function searchQdrant(embedding) {
     const body = JSON.stringify({
       vector: embedding,
       limit: 4,
+      with_payload: true
     });
     
     const options = {
