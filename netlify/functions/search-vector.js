@@ -116,7 +116,6 @@ async function searchQdrant(embedding) {
     const body = JSON.stringify({
       vector: embedding,
       limit: 4,
-      score_threshold: 0.5  // LOWERED from 0.7
     });
     
     const options = {
