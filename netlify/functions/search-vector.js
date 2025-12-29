@@ -363,8 +363,9 @@ RULES:
         try {
           const response = JSON.parse(data);
           const result = JSON.parse(response.choices[0].message.content);
-          resolve(result.paragraphs || []);
-        } catch (err) {
+          const paragraphs = result.paragraphs || [];
+          const withCitations = paragraphs.map((para, i) => para.includes(`[${i+1}]`) ? para : para + ` [${i+1}]`);
+          resolve(withCitations);        } catch (err) {
           console.error('Error parsing OpenAI response:', err);
           resolve([`Pastor Bob teaches about ${query} in these sermons.`]);
         }
