@@ -291,7 +291,7 @@ async function searchQdrant(embedding) {
           console.log('Qdrant response:', JSON.stringify(response).substring(0, 500));
           
           if (response.result && Array.isArray(response.result)) {
-            const sermons = response.result.map(r => r.payload).filter(s => !s.word_count || s.word_count >= 1000);
+            const sermons = response.result.filter(r => r.score >= 0.40).map(r => r.payload).filter(s => !s.word_count || s.word_count >= 1000);
             resolve(sermons);
           } else {
             console.error('Unexpected Qdrant response:', response);
