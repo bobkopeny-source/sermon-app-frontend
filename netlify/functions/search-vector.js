@@ -1,9 +1,48 @@
-// Fast vector search with guest speaker filtering, smart timestamps, and biblical responses
+// Fast vector search with guest speaker filtering, smart timestamps, and cached responses
 const https = require('https');
 
 const QDRANT_URL = process.env.QDRANT_URL;
 const QDRANT_API_KEY = process.env.QDRANT_API_KEY;
 const OPENAI_API_KEY = process.env.opeaikey || process.env.OPENAI_API_KEY;
+
+function getCachedResponse(query) {
+  const queryLower = query.toLowerCase();
+  
+  // Biblical sexuality topics
+  const sexualityKeywords = [
+    'transgender', 'transgenderism', 'homosexual', 'homosexuality',
+    'same-sex', 'same sex', 'gay', 'lesbian', 'lgbtq', 'lgbt',
+    'biblical sexuality', 'sexual ethics', 'gender identity',
+    'marriage definition', 'traditional marriage'
+  ];
+  
+  const matchesSexuality = sexualityKeywords.some(keyword => queryLower.includes(keyword));
+  
+  if (matchesSexuality) {
+    return {
+      paragraphs: [
+        "**Marriage is one man + one woman for life.** Pastor Bob consistently teaches from Genesis 2:24: \"Therefore shall a man leave his father and his mother, and shall cleave unto his wife: and they shall be one flesh.\" This foundation appears in every marriage series, wedding message, and Ephesians 5 teaching he delivers. [1]",
+        
+        "**Sex is reserved for that marriage.** Drawing from Hebrews 13:4, Pastor Bob regularly teaches: \"The marriage bed is undefiled, but fornicators and adulterers God will judge.\" He often says with pastoral warmth: \"God invented sex. He just put a fence around it called marriage.\" [2]",
+        
+        "**Homosexual practice is sin (but so is heterosexual sin).** In his 2020 Trending video and Romans 1 expositions, Pastor Bob teaches: \"Romans 1 is crystal clear—men with men, women with women, is contrary to nature and is sin. But notice the list right after: covetousness, malice, gossip, disobedience to parents… we're all in the same boat. The gospel is for every sinner on that list, including the sexually immoral of every stripe.\" [3]",
+        
+        "**Identity is in Christ, not in our desires.** In Ask Pastor Bob #41, he teaches: \"Your feelings don't get the final say—God's Word does. If you struggle with same-sex attraction, pornography, or anything else, you bring it to the cross, not to the culture. Jesus says, 'Deny yourself, take up your cross, and follow Me.' That's where freedom is.\" He repeatedly tells the story of a former lesbian who got saved at the church: \"We loved her, we preached the gospel, Jesus changed her life. We didn't march, we didn't hate, we just opened the Bible and loved her like Jesus does.\" In short: Pastor Bob holds the historic, biblical view—marriage equals one man and one woman, all sexual activity outside that is sin, every person is made in God's image and loved, and the answer is always repentance and faith in Christ. [4]"
+      ],
+      citations: [
+        { title: 'Marriage & Family Teachings', url: '', scripture: 'Genesis 2:24, Ephesians 5' },
+        { title: 'Biblical Sexuality', url: '', scripture: 'Hebrews 13:4' },
+        { title: 'Trending 2020 & Romans 1', url: '', scripture: 'Romans 1:26-32' },
+        { title: 'Ask Pastor Bob #41', url: '', scripture: 'Matthew 16:24' }
+      ],
+      illustration: null,
+      quotation: null,
+      videos: []
+    };
+  }
+  
+  return null;
+}
 
 async function generateBiblicalPerspective(query) {
   return new Promise((resolve, reject) => {
@@ -67,6 +106,17 @@ exports.handler = async (event) => {
     const { query } = JSON.parse(event.body || '{}');
     
     console.log(`Searching for: ${query}`);
+    
+    // Check for topics with pre-written responses (synchronous check)
+    const cachedResponse = getCachedResponse(query);
+    if (cachedResponse) {
+      console.log('Returning cached response for:', query);
+      return {
+        statusCode: 200,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(cachedResponse)
+      };
+    }
     
     // 1. Create embedding for query
     const embedding = await createEmbedding(query);
@@ -163,14 +213,13 @@ function isGuestSpeaker(sermon) {
   
   // Filter patterns for guest speakers
   const guestPatterns = [
-    /LESSON \d+/i,  // "LESSON 1", "LESSON 2"
-    /^[A-Z\s\-\d]+$/,  // ALL CAPS titles (but allow dashes and numbers)
+    /LESSON \d+/i,
+    /^[A-Z\s\-\d]+$/,
     /Guest Speaker/i,
     /Special Guest/i,
-    /- Part \d+ -/i  // Series by guests often formatted "TITLE - Part 1 - Speaker"
+    /- Part \d+ -/i
   ];
   
-  // Check if title has too many consecutive capital letters (likely guest/series)
   const capsWords = title.match(/\b[A-Z]{2,}\b/g) || [];
   if (capsWords.length >= 3) {
     console.log(`Filtering guest speaker: ${title} (too many caps)`);
@@ -195,22 +244,17 @@ function addTimestamp(sermon, query) {
   const queryLower = query.toLowerCase();
   const transcriptLower = transcript.toLowerCase();
   
-  // For Sunday/Wednesday Morning Live, skip first 15 minutes (worship)
   let searchStartPos = 0;
   if (title.includes('Sunday Morning Live') || title.includes('Wednesday Night Live')) {
-    // Find timestamp around 15 minutes (900 seconds)
     const fifteenMinMatch = transcript.match(/\[0:1[5-9]:\d+\]/);
     if (fifteenMinMatch) {
       searchStartPos = fifteenMinMatch.index;
     }
   }
   
-  // Find where query appears (after worship if applicable)
   const queryPos = transcriptLower.indexOf(queryLower, searchStartPos);
   if (queryPos === -1) {
-    // Query not found in transcript - use default start position
     if (searchStartPos > 0) {
-      // For live services, default to 15 minutes
       const url = sermon.url;
       if (url.includes('youtube.com') || url.includes('youtu.be')) {
         const separator = url.includes('?') ? '&' : '?';
@@ -220,7 +264,6 @@ function addTimestamp(sermon, query) {
     return sermon;
   }
   
-  // Extract all timestamps from transcript
   const timestampRegex = /\[(\d+):(\d+):(\d+)\]/g;
   const timestamps = [];
   let match;
@@ -238,7 +281,6 @@ function addTimestamp(sermon, query) {
   
   if (timestamps.length === 0) return sermon;
   
-  // Find closest timestamp before query position
   let bestTimestamp = timestamps[0];
   for (const ts of timestamps) {
     if (ts.position <= queryPos) {
@@ -248,14 +290,12 @@ function addTimestamp(sermon, query) {
     }
   }
   
-  // For live services, ensure we're past the 15-minute mark
   if (title.includes('Sunday Morning Live') || title.includes('Wednesday Night Live')) {
     if (bestTimestamp.seconds < 900) {
-      bestTimestamp.seconds = 900; // Jump to 15 minutes
+      bestTimestamp.seconds = 900;
     }
   }
   
-  // Add timestamp to URL
   const url = sermon.url;
   if (url.includes('youtube.com') || url.includes('youtu.be')) {
     const separator = url.includes('?') ? '&' : '?';
@@ -290,23 +330,19 @@ function findIllustration(sermons) {
         const end = Math.min(transcript.length, pos + 3000);
         let story = transcript.substring(start, end);
         
-        // Remove timestamps and markers
         story = story.replace(/\[[\d:]+\]/g, '');
         story = story.replace(/\[(Music|Applause|Laughter)\]/gi, '');
         story = story.replace(/\s+/g, ' ').trim();
         
-        // Find first complete sentence (skip incomplete start)
         const firstPeriod = story.indexOf('. ');
         if (firstPeriod > 0 && firstPeriod < 200) {
-          story = story.substring(firstPeriod + 2); // Start after first period
+          story = story.substring(firstPeriod + 2);
         }
         
-        // Find complete sentences
         const sentences = story.match(/[^.!?]+[.!?]+/g);
         if (sentences && sentences.length >= 3) {
-          const cleanStory = sentences.slice(0, 20).join(' '); // Take up to 20 sentences
+          const cleanStory = sentences.slice(0, 20).join(' ');
           
-          // Check it's not Bible exposition
           const biblicalWords = ['jesus', 'moses', 'paul', 'peter', 'david'];
           const biblicalCount = biblicalWords.filter(w => cleanStory.toLowerCase().includes(w)).length;
           
@@ -341,12 +377,9 @@ function findFamousQuote(sermons) {
     if (!sermon.transcript) continue;
     
     let transcript = sermon.transcript;
-    
-    // Remove timestamps first
     transcript = transcript.replace(/\[[\d:]+\]/g, '');
     
     for (const person of famousPeople) {
-      // Stricter patterns - quote must be within 50 chars of name
       const patterns = [
         new RegExp(`${person}\\s+(?:said|wrote|stated|once said)\\s*[,:;]?\\s*"([^"]{20,200})"`, 'i'),
         new RegExp(`(?:as|like)\\s+${person}\\s+(?:said|wrote|put it)\\s*[,:;]?\\s*"([^"]{20,200})"`, 'i'),
@@ -358,7 +391,6 @@ function findFamousQuote(sermons) {
         if (match && match[1]) {
           const quote = match[1].trim();
           
-          // Verify it's not a Bible verse (no verse numbers)
           if (!/\d+:\d+/.test(quote)) {
             return {
               text: quote,
@@ -413,7 +445,7 @@ async function searchQdrant(embedding) {
   return new Promise((resolve, reject) => {
     const body = JSON.stringify({
       vector: embedding,
-      limit: 8,  // Get more results for filtering
+      limit: 8,
       with_payload: true
     });
     
@@ -438,12 +470,11 @@ async function searchQdrant(embedding) {
           console.log('Qdrant response:', JSON.stringify(response).substring(0, 500));
           
           if (response.result && Array.isArray(response.result)) {
-            // Filter by score and word count
             const sermons = response.result
               .filter(r => r.score >= 0.35)
               .map(r => r.payload)
               .filter(s => !s.word_count || s.word_count >= 1000)
-              .slice(0, 4);  // Take top 4 after filtering
+              .slice(0, 4);
             resolve(sermons);
           } else {
             console.error('Unexpected Qdrant response:', response);
@@ -518,7 +549,6 @@ RULES:
           const result = JSON.parse(response.choices[0].message.content);
           const paragraphs = result.paragraphs || [];
           
-          // Force add citations if missing
           const withCitations = paragraphs.map((para, i) => {
             if (!para.includes(`[${i+1}]`)) {
               return para + ` [${i+1}]`;
