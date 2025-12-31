@@ -1,4 +1,4 @@
-// Fast vector search using Qdrant with timestamps, illustrations, and quotes
+// Fast vector search with guest speaker filtering and smart timestamps
 const https = require('https');
 
 const QDRANT_URL = process.env.QDRANT_URL;
@@ -16,9 +16,14 @@ exports.handler = async (event) => {
     console.log('Created embedding');
     
     // 2. Search Qdrant
-    const sermons = await searchQdrant(embedding);
+    let sermons = await searchQdrant(embedding);
     
-    console.log(`Found ${sermons.length} sermons`);
+    console.log(`Found ${sermons.length} sermons from Qdrant`);
+    
+    // 3. Filter out guest speakers
+    sermons = sermons.filter(s => !isGuestSpeaker(s));
+    
+    console.log(`After guest filter: ${sermons.length} sermons`);
     
     if (sermons.length === 0) {
       return {
@@ -34,19 +39,19 @@ exports.handler = async (event) => {
       };
     }
     
-    // 3. Add timestamps to URLs
+    // 4. Add timestamps to URLs
     const sermonsWithTimestamps = sermons.map(s => addTimestamp(s, query));
     
-    // 4. Find illustration
+    // 5. Find illustration
     const illustration = findIllustration(sermonsWithTimestamps);
     
-    // 5. Find famous quote
+    // 6. Find famous quote
     const quotation = findFamousQuote(sermonsWithTimestamps);
     
-    // 6. Synthesize answer
+    // 7. Synthesize answer
     const paragraphs = await synthesizeAnswer(sermonsWithTimestamps, query);
     
-    // 7. Build response
+    // 8. Build response
     const citations = sermonsWithTimestamps.map(s => ({
       id: s.id,
       title: s.title,
@@ -85,16 +90,67 @@ exports.handler = async (event) => {
   }
 };
 
+function isGuestSpeaker(sermon) {
+  const title = sermon.title || '';
+  
+  // Filter patterns for guest speakers
+  const guestPatterns = [
+    /LESSON \d+/i,  // "LESSON 1", "LESSON 2"
+    /^[A-Z\s\-\d]+$/,  // ALL CAPS titles (but allow dashes and numbers)
+    /Guest Speaker/i,
+    /Special Guest/i,
+    /- Part \d+ -/i  // Series by guests often formatted "TITLE - Part 1 - Speaker"
+  ];
+  
+  // Check if title has too many consecutive capital letters (likely guest/series)
+  const capsWords = title.match(/\b[A-Z]{2,}\b/g) || [];
+  if (capsWords.length >= 3) {
+    console.log(`Filtering guest speaker: ${title} (too many caps)`);
+    return true;
+  }
+  
+  for (const pattern of guestPatterns) {
+    if (pattern.test(title)) {
+      console.log(`Filtering guest speaker: ${title}`);
+      return true;
+    }
+  }
+  
+  return false;
+}
+
 function addTimestamp(sermon, query) {
   if (!sermon.url || !sermon.transcript) return sermon;
   
   const transcript = sermon.transcript;
+  const title = sermon.title || '';
   const queryLower = query.toLowerCase();
   const transcriptLower = transcript.toLowerCase();
   
-  // Find where query appears
-  const queryPos = transcriptLower.indexOf(queryLower);
-  if (queryPos === -1) return sermon;
+  // For Sunday/Wednesday Morning Live, skip first 10 minutes (worship)
+  let searchStartPos = 0;
+  if (title.includes('Sunday Morning Live') || title.includes('Wednesday Night Live')) {
+    // Find timestamp around 10 minutes (600 seconds)
+    const tenMinMatch = transcript.match(/\[0:1[0-5]:\d+\]/);
+    if (tenMinMatch) {
+      searchStartPos = tenMinMatch.index;
+    }
+  }
+  
+  // Find where query appears (after worship if applicable)
+  const queryPos = transcriptLower.indexOf(queryLower, searchStartPos);
+  if (queryPos === -1) {
+    // Query not found in transcript - use default start position
+    if (searchStartPos > 0) {
+      // For live services, default to 10 minutes
+      const url = sermon.url;
+      if (url.includes('youtube.com') || url.includes('youtu.be')) {
+        const separator = url.includes('?') ? '&' : '?';
+        sermon.timestampedUrl = `${url}${separator}t=600s`;
+      }
+    }
+    return sermon;
+  }
   
   // Extract all timestamps from transcript
   const timestampRegex = /\[(\d+):(\d+):(\d+)\]/g;
@@ -121,6 +177,13 @@ function addTimestamp(sermon, query) {
       bestTimestamp = ts;
     } else {
       break;
+    }
+  }
+  
+  // For live services, ensure we're past the 10-minute mark
+  if (title.includes('Sunday Morning Live') || title.includes('Wednesday Night Live')) {
+    if (bestTimestamp.seconds < 600) {
+      bestTimestamp.seconds = 600; // Jump to 10 minutes
     }
   }
   
@@ -156,16 +219,12 @@ function findIllustration(sermons) {
       if (match) {
         const pos = match.index;
         const start = Math.max(0, pos - 100);
-        const end = Math.min(transcript.length, pos + 1000);
+        const end = Math.min(transcript.length, pos + 1200);
         let story = transcript.substring(start, end);
         
-        // Remove timestamps
+        // Remove timestamps and markers
         story = story.replace(/\[[\d:]+\]/g, '');
-        
-        // Remove music/applause markers
         story = story.replace(/\[(Music|Applause|Laughter)\]/gi, '');
-        
-        // Clean whitespace
         story = story.replace(/\s+/g, ' ').trim();
         
         // Find complete sentences
@@ -205,7 +264,6 @@ function findFamousQuote(sermons) {
     const transcript = sermon.transcript;
     
     for (const person of famousPeople) {
-      // Look for patterns like "Spurgeon said" or "as Luther wrote"
       const patterns = [
         new RegExp(`${person}[^.]*?(?:said|wrote|stated|once said)[^"]*"([^"]+)"`, 'i'),
         new RegExp(`(?:as|like)\\s+${person}\\s+(?:said|wrote)[^"]*"([^"]+)"`, 'i')
@@ -266,7 +324,7 @@ async function searchQdrant(embedding) {
   return new Promise((resolve, reject) => {
     const body = JSON.stringify({
       vector: embedding,
-      limit: 4,
+      limit: 8,  // Get more results for filtering
       with_payload: true
     });
     
@@ -291,7 +349,12 @@ async function searchQdrant(embedding) {
           console.log('Qdrant response:', JSON.stringify(response).substring(0, 500));
           
           if (response.result && Array.isArray(response.result)) {
-            const sermons = response.result.filter(r => r.score >= 0.28).map(r => r.payload).filter(s => !s.word_count || s.word_count >= 1000);
+            // Filter by score and word count
+            const sermons = response.result
+              .filter(r => r.score >= 0.28)
+              .map(r => r.payload)
+              .filter(s => !s.word_count || s.word_count >= 1000)
+              .slice(0, 4);  // Take top 4 after filtering
             resolve(sermons);
           } else {
             console.error('Unexpected Qdrant response:', response);
@@ -315,7 +378,7 @@ async function searchQdrant(embedding) {
 
 async function synthesizeAnswer(sermons, query) {
   const context = sermons.map((s, i) => {
-    const excerpt = (s.transcript || '').substring(0, 1000);
+    const excerpt = (s.transcript || '').substring(0, 1200);
     return `[Sermon ${i+1}: "${s.title}"]\n${excerpt}`;
   }).join('\n\n---\n\n');
   
@@ -333,7 +396,8 @@ RULES:
 - Include DIRECT QUOTES from Pastor Bob in "quotation marks"
 - Write 4 comprehensive paragraphs (4-6 sentences each)
 - Use warm, pastoral tone
-- Focus on practical application`
+- Focus on practical application
+- CRITICAL: Place citation [N] at the END of each paragraph`
         },
         {
           role: 'user',
@@ -364,10 +428,19 @@ RULES:
           const response = JSON.parse(data);
           const result = JSON.parse(response.choices[0].message.content);
           const paragraphs = result.paragraphs || [];
-          const withCitations = paragraphs.map((para, i) => para.includes(`[${i+1}]`) ? para : para + ` [${i+1}]`);
-          resolve(withCitations);        } catch (err) {
+          
+          // Force add citations if missing
+          const withCitations = paragraphs.map((para, i) => {
+            if (!para.includes(`[${i+1}]`)) {
+              return para + ` [${i+1}]`;
+            }
+            return para;
+          });
+          
+          resolve(withCitations);
+        } catch (err) {
           console.error('Error parsing OpenAI response:', err);
-          resolve([`Pastor Bob teaches about ${query} in these sermons.`]);
+          resolve([`Pastor Bob teaches about ${query} in these sermons. [1]`]);
         }
       });
     });
