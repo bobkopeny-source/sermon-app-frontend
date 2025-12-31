@@ -466,7 +466,7 @@ async function searchQdrant(embedding) {
           
           if (response.result && Array.isArray(response.result)) {
             const sermons = response.result
-              .filter(r => r.score >= 0.30)
+              .filter(r => r.score >= 0.28)
               .map(r => r.payload)
               .filter(s => !s.word_count || s.word_count >= 1000)
               .slice(0, 4);
