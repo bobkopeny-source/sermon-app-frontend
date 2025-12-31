@@ -21,20 +21,15 @@ function getCachedResponse(query) {
   if (matchesSexuality) {
     return {
       paragraphs: [
-        "**Marriage is one man + one woman for life.** Pastor Bob consistently teaches from Genesis 2:24: \"Therefore shall a man leave his father and his mother, and shall cleave unto his wife: and they shall be one flesh.\" This foundation appears in every marriage series, wedding message, and Ephesians 5 teaching he delivers. [1]",
+        "**Marriage is one man + one woman for life.** Pastor Bob consistently teaches from Genesis 2:24: \"Therefore shall a man leave his father and his mother, and shall cleave unto his wife: and they shall be one flesh.\" This foundation appears in every marriage series, wedding message, and Ephesians 5 teaching he delivers.",
         
-        "**Sex is reserved for that marriage.** Drawing from Hebrews 13:4, Pastor Bob regularly teaches: \"The marriage bed is undefiled, but fornicators and adulterers God will judge.\" He often says with pastoral warmth: \"God invented sex. He just put a fence around it called marriage.\" [2]",
+        "**Sex is reserved for that marriage.** Drawing from Hebrews 13:4, Pastor Bob regularly teaches: \"The marriage bed is undefiled, but fornicators and adulterers God will judge.\" He often says with pastoral warmth: \"God invented sex. He just put a fence around it called marriage.\"",
         
-        "**Homosexual practice is sin (but so is heterosexual sin).** In his 2020 Trending video and Romans 1 expositions, Pastor Bob teaches: \"Romans 1 is crystal clear—men with men, women with women, is contrary to nature and is sin. But notice the list right after: covetousness, malice, gossip, disobedience to parents… we're all in the same boat. The gospel is for every sinner on that list, including the sexually immoral of every stripe.\" [3]",
+        "**Homosexual practice is sin (but so is heterosexual sin).** In his 2020 Trending video and Romans 1 expositions, Pastor Bob teaches: \"Romans 1 is crystal clear—men with men, women with women, is contrary to nature and is sin. But notice the list right after: covetousness, malice, gossip, disobedience to parents… we're all in the same boat. The gospel is for every sinner on that list, including the sexually immoral of every stripe.\"",
         
-        "**Identity is in Christ, not in our desires.** In Ask Pastor Bob #41, he teaches: \"Your feelings don't get the final say—God's Word does. If you struggle with same-sex attraction, pornography, or anything else, you bring it to the cross, not to the culture. Jesus says, 'Deny yourself, take up your cross, and follow Me.' That's where freedom is.\" He repeatedly tells the story of a former lesbian who got saved at the church: \"We loved her, we preached the gospel, Jesus changed her life. We didn't march, we didn't hate, we just opened the Bible and loved her like Jesus does.\" In short: Pastor Bob holds the historic, biblical view—marriage equals one man and one woman, all sexual activity outside that is sin, every person is made in God's image and loved, and the answer is always repentance and faith in Christ. [4]"
+        "**Identity is in Christ, not in our desires.** In Ask Pastor Bob #41, he teaches: \"Your feelings don't get the final say—God's Word does. If you struggle with same-sex attraction, pornography, or anything else, you bring it to the cross, not to the culture. Jesus says, 'Deny yourself, take up your cross, and follow Me.' That's where freedom is.\" He repeatedly tells the story of a former lesbian who got saved at the church: \"We loved her, we preached the gospel, Jesus changed her life. We didn't march, we didn't hate, we just opened the Bible and loved her like Jesus does.\" In short: Pastor Bob holds the historic, biblical view—marriage equals one man and one woman, all sexual activity outside that is sin, every person is made in God's image and loved, and the answer is always repentance and faith in Christ."
       ],
-      citations: [
-        { title: 'Marriage & Family Teachings', url: '', scripture: 'Genesis 2:24, Ephesians 5' },
-        { title: 'Biblical Sexuality', url: '', scripture: 'Hebrews 13:4' },
-        { title: 'Trending 2020 & Romans 1', url: '', scripture: 'Romans 1:26-32' },
-        { title: 'Ask Pastor Bob #41', url: '', scripture: 'Matthew 16:24' }
-      ],
+      citations: [],
       illustration: null,
       quotation: null,
       videos: []
