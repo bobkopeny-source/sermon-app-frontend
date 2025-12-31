@@ -1,9 +1,66 @@
-// Fast vector search with guest speaker filtering and smart timestamps
+// Fast vector search with guest speaker filtering, smart timestamps, and biblical responses
 const https = require('https');
 
 const QDRANT_URL = process.env.QDRANT_URL;
 const QDRANT_API_KEY = process.env.QDRANT_API_KEY;
 const OPENAI_API_KEY = process.env.opeaikey || process.env.OPENAI_API_KEY;
+
+async function generateBiblicalPerspective(query) {
+  return new Promise((resolve, reject) => {
+    const body = JSON.stringify({
+      model: 'gpt-4o-mini',
+      messages: [
+        {
+          role: 'system',
+          content: `You are providing a general biblical perspective on a topic. 
+
+CRITICAL: You are NOT speaking as Pastor Bob. This is a general biblical response because Pastor Bob hasn't preached specifically on this topic.
+
+Write a thoughtful, biblically-grounded paragraph (5-7 sentences) that:
+- Starts with: "While I don't have specific sermons from Pastor Bob on this topic, here's what Scripture teaches..."
+- Provides biblical perspective with relevant Scripture references
+- Is pastoral and gracious in tone
+- Ends with: "For Pastor Bob's specific teaching, try searching for related topics like [suggest 2-3 related topics]."`
+        },
+        {
+          role: 'user',
+          content: `Provide biblical perspective on: ${query}`
+        }
+      ],
+      temperature: 0.7,
+      max_tokens: 300
+    });
+    
+    const options = {
+      hostname: 'api.openai.com',
+      path: '/v1/chat/completions',
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${OPENAI_API_KEY}`,
+        'Content-Length': Buffer.byteLength(body)
+      }
+    };
+    
+    const req = https.request(options, (res) => {
+      let data = '';
+      res.on('data', chunk => data += chunk);
+      res.on('end', () => {
+        try {
+          const response = JSON.parse(data);
+          resolve(response.choices[0].message.content);
+        } catch (err) {
+          console.error('Error generating biblical response:', err);
+          resolve(`I couldn't find specific sermons from Pastor Bob about "${query}". Try searching for related biblical topics that he has preached on.`);
+        }
+      });
+    });
+    
+    req.on('error', reject);
+    req.write(body);
+    req.end();
+  });
+}
 
 exports.handler = async (event) => {
   try {
@@ -26,11 +83,14 @@ exports.handler = async (event) => {
     console.log(`After guest filter: ${sermons.length} sermons`);
     
     if (sermons.length === 0) {
+      // Generate general biblical response
+      const biblicalResponse = await generateBiblicalPerspective(query);
+      
       return {
         statusCode: 200,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          paragraphs: [`I couldn't find sermons about "${query}".`],
+          paragraphs: [biblicalResponse],
           citations: [],
           illustration: null,
           quotation: null,
@@ -92,6 +152,14 @@ exports.handler = async (event) => {
 
 function isGuestSpeaker(sermon) {
   const title = sermon.title || '';
+  const transcript = (sermon.transcript || '').toLowerCase();
+  
+  // Filter Wednesday/Sunday Live without Pastor Bob (guest speakers)
+  if ((title.includes('Wednesday Night Live') || title.includes('Sunday Morning Live')) && 
+      !transcript.includes('pastor bob') && !transcript.includes('pastor bobby')) {
+    console.log(`Filtering guest speaker (no Pastor Bob): ${title}`);
+    return true;
+  }
   
   // Filter patterns for guest speakers
   const guestPatterns = [
@@ -127,13 +195,13 @@ function addTimestamp(sermon, query) {
   const queryLower = query.toLowerCase();
   const transcriptLower = transcript.toLowerCase();
   
-  // For Sunday/Wednesday Morning Live, skip first 10 minutes (worship)
+  // For Sunday/Wednesday Morning Live, skip first 15 minutes (worship)
   let searchStartPos = 0;
   if (title.includes('Sunday Morning Live') || title.includes('Wednesday Night Live')) {
-    // Find timestamp around 10 minutes (600 seconds)
-    const tenMinMatch = transcript.match(/\[0:1[0-5]:\d+\]/);
-    if (tenMinMatch) {
-      searchStartPos = tenMinMatch.index;
+    // Find timestamp around 15 minutes (900 seconds)
+    const fifteenMinMatch = transcript.match(/\[0:1[5-9]:\d+\]/);
+    if (fifteenMinMatch) {
+      searchStartPos = fifteenMinMatch.index;
     }
   }
   
@@ -141,12 +209,12 @@ function addTimestamp(sermon, query) {
   const queryPos = transcriptLower.indexOf(queryLower, searchStartPos);
   if (queryPos === -1) {
     // Query not found in transcript - use default start position
-    if (title.includes('Wednesday Night Live')) searchStartPos = Math.max(searchStartPos, 900); if (searchStartPos > 0) {
-      // For live services, default to 10 minutes
+    if (searchStartPos > 0) {
+      // For live services, default to 15 minutes
       const url = sermon.url;
       if (url.includes('youtube.com') || url.includes('youtu.be')) {
         const separator = url.includes('?') ? '&' : '?';
-        sermon.timestampedUrl = `${url}${separator}t=600s`;
+        sermon.timestampedUrl = `${url}${separator}t=900s`;
       }
     }
     return sermon;
@@ -180,10 +248,10 @@ function addTimestamp(sermon, query) {
     }
   }
   
-  // For live services, ensure we're past the 10-minute mark
+  // For live services, ensure we're past the 15-minute mark
   if (title.includes('Sunday Morning Live') || title.includes('Wednesday Night Live')) {
-    if (bestTimestamp.seconds < 600) {
-      bestTimestamp.seconds = 600; // Jump to 10 minutes
+    if (bestTimestamp.seconds < 900) {
+      bestTimestamp.seconds = 900; // Jump to 15 minutes
     }
   }
   
@@ -236,7 +304,7 @@ function findIllustration(sermons) {
         // Find complete sentences
         const sentences = story.match(/[^.!?]+[.!?]+/g);
         if (sentences && sentences.length >= 3) {
-          const cleanStory = sentences.slice(0, 20).join(' '); // Take up to 8 sentences
+          const cleanStory = sentences.slice(0, 20).join(' '); // Take up to 20 sentences
           
           // Check it's not Bible exposition
           const biblicalWords = ['jesus', 'moses', 'paul', 'peter', 'david'];
@@ -372,7 +440,7 @@ async function searchQdrant(embedding) {
           if (response.result && Array.isArray(response.result)) {
             // Filter by score and word count
             const sermons = response.result
-              .filter(r => r.score >= 0.28)
+              .filter(r => r.score >= 0.35)
               .map(r => r.payload)
               .filter(s => !s.word_count || s.word_count >= 1000)
               .slice(0, 4);  // Take top 4 after filtering
