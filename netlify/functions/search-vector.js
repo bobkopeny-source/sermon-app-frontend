@@ -219,7 +219,7 @@ function findIllustration(sermons) {
       if (match) {
         const pos = match.index;
         const start = Math.max(0, pos - 300);
-        const end = Math.min(transcript.length, pos + 2000);
+        const end = Math.min(transcript.length, pos + 3000);
         let story = transcript.substring(start, end);
         
         // Remove timestamps and markers
@@ -236,7 +236,7 @@ function findIllustration(sermons) {
         // Find complete sentences
         const sentences = story.match(/[^.!?]+[.!?]+/g);
         if (sentences && sentences.length >= 3) {
-          const cleanStory = sentences.slice(0, 12).join(' '); // Take up to 8 sentences
+          const cleanStory = sentences.slice(0, 20).join(' '); // Take up to 8 sentences
           
           // Check it's not Bible exposition
           const biblicalWords = ['jesus', 'moses', 'paul', 'peter', 'david'];
