@@ -218,8 +218,8 @@ function findIllustration(sermons) {
       const match = transcript.match(pattern);
       if (match) {
         const pos = match.index;
-        const start = Math.max(0, pos - 100);
-        const end = Math.min(transcript.length, pos + 1200);
+        const start = Math.max(0, pos - 300);
+        const end = Math.min(transcript.length, pos + 1500);
         let story = transcript.substring(start, end);
         
         // Remove timestamps and markers
@@ -227,16 +227,22 @@ function findIllustration(sermons) {
         story = story.replace(/\[(Music|Applause|Laughter)\]/gi, '');
         story = story.replace(/\s+/g, ' ').trim();
         
+        // Find first complete sentence (skip incomplete start)
+        const firstPeriod = story.indexOf('. ');
+        if (firstPeriod > 0 && firstPeriod < 200) {
+          story = story.substring(firstPeriod + 2); // Start after first period
+        }
+        
         // Find complete sentences
         const sentences = story.match(/[^.!?]+[.!?]+/g);
         if (sentences && sentences.length >= 3) {
-          const cleanStory = sentences.slice(0, 6).join(' ');
+          const cleanStory = sentences.slice(0, 8).join(' '); // Take up to 8 sentences
           
           // Check it's not Bible exposition
           const biblicalWords = ['jesus', 'moses', 'paul', 'peter', 'david'];
           const biblicalCount = biblicalWords.filter(w => cleanStory.toLowerCase().includes(w)).length;
           
-          if (biblicalCount < 2) {
+          if (biblicalCount < 2 && cleanStory.length >= 100) {
             return {
               text: cleanStory,
               source: sermon.title
@@ -252,31 +258,46 @@ function findIllustration(sermons) {
 
 function findFamousQuote(sermons) {
   const famousPeople = [
-    'Spurgeon', 'Luther', 'Augustine', 'Calvin', 'Wesley', 'Edwards',
-    'C.S. Lewis', 'Lewis', 'Tozer', 'Bonhoeffer', 'Piper', 'Pascal',
-    'Churchill', 'Lincoln', 'Washington', 'Franklin',
-    'Chesterton', 'Tolkien', 'Wilberforce', 'MacDonald'
+    'Charles Spurgeon', 'Spurgeon', 'Martin Luther', 'Luther', 
+    'Augustine', 'John Calvin', 'Calvin', 'John Wesley', 'Wesley', 
+    'Jonathan Edwards', 'Edwards', 'C.S. Lewis', 'Lewis', 
+    'A.W. Tozer', 'Tozer', 'Dietrich Bonhoeffer', 'Bonhoeffer', 
+    'John Piper', 'Piper', 'Blaise Pascal', 'Pascal',
+    'Winston Churchill', 'Churchill', 'Abraham Lincoln', 'Lincoln', 
+    'George Washington', 'Washington', 'Benjamin Franklin',
+    'G.K. Chesterton', 'Chesterton', 'J.R.R. Tolkien', 'Tolkien', 
+    'William Wilberforce', 'Wilberforce', 'George MacDonald', 'MacDonald'
   ];
   
   for (const sermon of sermons) {
     if (!sermon.transcript) continue;
     
-    const transcript = sermon.transcript;
+    let transcript = sermon.transcript;
+    
+    // Remove timestamps first
+    transcript = transcript.replace(/\[[\d:]+\]/g, '');
     
     for (const person of famousPeople) {
+      // Stricter patterns - quote must be within 50 chars of name
       const patterns = [
-        new RegExp(`${person}[^.]*?(?:said|wrote|stated|once said)[^"]*"([^"]+)"`, 'i'),
-        new RegExp(`(?:as|like)\\s+${person}\\s+(?:said|wrote)[^"]*"([^"]+)"`, 'i')
+        new RegExp(`${person}\\s+(?:said|wrote|stated|once said)\\s*[,:;]?\\s*"([^"]{20,200})"`, 'i'),
+        new RegExp(`(?:as|like)\\s+${person}\\s+(?:said|wrote|put it)\\s*[,:;]?\\s*"([^"]{20,200})"`, 'i'),
+        new RegExp(`"([^"]{20,200})"\\s*[,-]?\\s*${person}`, 'i')
       ];
       
       for (const pattern of patterns) {
         const match = transcript.match(pattern);
         if (match && match[1]) {
-          return {
-            text: match[1],
-            author: person,
-            source: sermon.title
-          };
+          const quote = match[1].trim();
+          
+          // Verify it's not a Bible verse (no verse numbers)
+          if (!/\d+:\d+/.test(quote)) {
+            return {
+              text: quote,
+              author: person,
+              source: sermon.title
+            };
+          }
         }
       }
     }
