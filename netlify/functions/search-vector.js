@@ -62,60 +62,11 @@ Write a thoughtful, biblically-grounded paragraph (5-7 sentences) that:
   });
 }
 
-function getCachedResponse(query) {
-  const queryLower = query.toLowerCase();
-  
-  // Biblical sexuality topics
-  const sexualityKeywords = [
-    'transgender', 'transgenderism', 'homosexual', 'homosexuality',
-    'same-sex', 'same sex', 'gay', 'lesbian', 'lgbtq', 'lgbt',
-    'biblical sexuality', 'sexual ethics', 'gender identity',
-    'marriage definition', 'traditional marriage'
-  ];
-  
-  const matchesSexuality = sexualityKeywords.some(keyword => queryLower.includes(keyword));
-  
-  if (matchesSexuality) {
-    return {
-      paragraphs: [
-        "**Marriage is one man + one woman for life.** Pastor Bob consistently teaches from Genesis 2:24: \"Therefore shall a man leave his father and his mother, and shall cleave unto his wife: and they shall be one flesh.\" This foundation appears in every marriage series, wedding message, and Ephesians 5 teaching he delivers. [1]",
-        
-        "**Sex is reserved for that marriage.** Drawing from Hebrews 13:4, Pastor Bob regularly teaches: \"The marriage bed is undefiled, but fornicators and adulterers God will judge.\" He often says with pastoral warmth: \"God invented sex. He just put a fence around it called marriage.\" [2]",
-        
-        "**Homosexual practice is sin (but so is heterosexual sin).** In his 2020 Trending video and Romans 1 expositions, Pastor Bob teaches: \"Romans 1 is crystal clear—men with men, women with women, is contrary to nature and is sin. But notice the list right after: covetousness, malice, gossip, disobedience to parents… we're all in the same boat. The gospel is for every sinner on that list, including the sexually immoral of every stripe.\" [3]",
-        
-        "**Identity is in Christ, not in our desires.** In Ask Pastor Bob #41, he teaches: \"Your feelings don't get the final say—God's Word does. If you struggle with same-sex attraction, pornography, or anything else, you bring it to the cross, not to the culture. Jesus says, 'Deny yourself, take up your cross, and follow Me.' That's where freedom is.\" He repeatedly tells the story of a former lesbian who got saved at the church: \"We loved her, we preached the gospel, Jesus changed her life. We didn't march, we didn't hate, we just opened the Bible and loved her like Jesus does.\" In short: Pastor Bob holds the historic, biblical view—marriage equals one man and one woman, all sexual activity outside that is sin, every person is made in God's image and loved, and the answer is always repentance and faith in Christ. [4]"
-      ],
-      citations: [
-        { title: 'Marriage & Family Teachings', url: '', scripture: 'Genesis 2:24, Ephesians 5' },
-        { title: 'Biblical Sexuality', url: '', scripture: 'Hebrews 13:4' },
-        { title: 'Trending 2020 & Romans 1', url: '', scripture: 'Romans 1:26-32' },
-        { title: 'Ask Pastor Bob #41', url: '', scripture: 'Matthew 16:24' }
-      ],
-      illustration: null,
-      quotation: null,
-      videos: []
-    };
-  }
-  
-  return null;
-}
-
+exports.handler = async (event) => {
   try {
     const { query } = JSON.parse(event.body || '{}');
     
     console.log(`Searching for: ${query}`);
-    
-    // Check for topics with pre-written responses
-    const cachedResponse = getCachedResponse(query);
-    if (cachedResponse) {
-      console.log('Returning cached response for:', query);
-      return {
-        statusCode: 200,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(cachedResponse)
-      };
-    }
     
     // 1. Create embedding for query
     const embedding = await createEmbedding(query);
