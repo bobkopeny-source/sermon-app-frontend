@@ -141,7 +141,7 @@ function addTimestamp(sermon, query) {
   const queryPos = transcriptLower.indexOf(queryLower, searchStartPos);
   if (queryPos === -1) {
     // Query not found in transcript - use default start position
-    if (searchStartPos > 0) {
+    if (title.includes('Wednesday Night Live')) searchStartPos = Math.max(searchStartPos, 900); if (searchStartPos > 0) {
       // For live services, default to 10 minutes
       const url = sermon.url;
       if (url.includes('youtube.com') || url.includes('youtu.be')) {
